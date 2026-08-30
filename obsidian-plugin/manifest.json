@@ -1,0 +1,9 @@
+{
+  "id": "obzo-complete",
+  "name": "Obzo",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Context-aware completions and Zotero context — equations, theorems, citations, figures — from the paper open in your Zotero reader.",
+  "author": "obzo",
+  "isDesktopOnly": true
+}

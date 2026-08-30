@@ -1,0 +1,23 @@
+.obzo-status {
+  cursor: pointer;
+}
+
+/* Autocomplete suggestion rows (used from the EditorSuggest, added next). */
+.obzo-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.obzo-suggestion-title {
+  font-weight: 600;
+}
+.obzo-suggestion-meta {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+.obzo-suggestion-kind {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+}

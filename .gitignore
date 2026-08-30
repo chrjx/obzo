@@ -1,0 +1,18 @@
+# secrets
+mineru.env
+*.env
+
+# private planning notes
+PLAN.md
+
+# dependencies
+node_modules/
+
+# build outputs
+dist/
+obzo-mcp/dist/
+obsidian-plugin/main.js
+*.js.map
+
+# os / editor
+.DS_Store

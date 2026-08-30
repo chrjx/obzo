@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "Obzo Bridge",
+  "version": "0.3.0",
+  "description": "Exposes the currently open Zotero reader item to the Obzo Obsidian plugin over Zotero's local HTTP server.",
+  "author": "obzo",
+  "homepage_url": "https://github.com/obzo/obzo-complete",
+  "applications": {
+    "zotero": {
+      "id": "obzo-bridge@obzo.local",
+      "update_url": "https://raw.githubusercontent.com/obzo/obzo-complete/main/updates.json",
+      "strict_min_version": "7.999",
+      "strict_max_version": "10.99.99"
+    }
+  }
+}
