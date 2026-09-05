@@ -14,12 +14,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, writeFile, appendFile, mkdir, stat } from "node:fs/promises";
+import { join, dirname, resolve } from "node:path";
 
 const ZOTERO_PORT = process.env.OBZO_ZOTERO_PORT ?? "23119";
 const ZOTERO_USER = process.env.OBZO_ZOTERO_USER ?? "0";
 const VAULT = process.env.OBZO_VAULT ?? "";
+const INBOX = process.env.OBZO_INBOX ?? "Obzo Inbox.md";
 const BASE = `http://127.0.0.1:${ZOTERO_PORT}`;
 const HEADERS = { "Zotero-Allowed-Request": "true" };
 
@@ -249,6 +250,100 @@ server.registerTool(
       return errText(e);
     }
   }
+);
+
+server.registerTool(
+  "insert_into_note",
+  {
+    description:
+      "Write Markdown into a vault note. mode 'append' (default) / 'prepend' add to an existing note (or the Obzo inbox if note_path is omitted); 'create' makes a new note. Returns the path written. The agent normally drafts text (e.g. from list_annotations) and calls this to save it.",
+    inputSchema: {
+      markdown: z.string(),
+      note_path: z.string().optional(),
+      mode: z.enum(["append", "prepend", "create"]).optional(),
+    },
+  },
+  async ({ markdown, note_path, mode }) => {
+    try {
+      if (!VAULT) throw new Error("OBZO_VAULT is not set (needed to write notes).");
+      const rel = (note_path ?? INBOX).replace(/^\/+/, "");
+      const abs = resolve(VAULT, rel);
+      if (!abs.startsWith(resolve(VAULT))) {
+        throw new Error("note_path escapes the vault.");
+      }
+      await mkdir(dirname(abs), { recursive: true });
+      const exists = await stat(abs).then(() => true).catch(() => false);
+      const m = mode ?? "append";
+
+      if (m === "create") {
+        if (exists) throw new Error(`Note already exists: ${rel} (use append).`);
+        await writeFile(abs, markdown.endsWith("\n") ? markdown : markdown + "\n");
+      } else if (m === "prepend") {
+        const prev = exists ? await readFile(abs, "utf8") : "";
+        await writeFile(abs, markdown.replace(/\n*$/, "\n\n") + prev);
+      } else {
+        const sep = exists ? "\n\n" : "";
+        await appendFile(abs, sep + markdown.replace(/\n*$/, "\n"));
+      }
+      return text({ ok: true, path: rel, mode: m });
+    } catch (e) {
+      return errText(e);
+    }
+  }
+);
+
+server.registerPrompt(
+  "summarize_annotation",
+  {
+    description:
+      "Turn the highlight you have selected in Zotero (or the most recent one) into a clean definition/theorem/claim and insert it into your note.",
+    argsSchema: { kind: z.string().optional() },
+  },
+  ({ kind }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Using the obzo tools:`,
+            `1. Call current_paper to get the paper and its attachmentKey.`,
+            `2. Call list_annotations with selectedOnly=true; if none, use the most recent highlight from list_annotations.`,
+            `3. Rewrite the highlighted text as a clean, self-contained ${
+              kind || "definition/theorem/claim"
+            } in Markdown (keep any math as LaTeX). Do not editorialize.`,
+            `4. Call insert_into_note with that Markdown, appending the annotation's zotero:// backlink on its own line.`,
+          ].join("\n"),
+        },
+      },
+    ],
+  })
+);
+
+server.registerPrompt(
+  "paper_note",
+  {
+    description:
+      "Draft a structured literature note for the paper currently open in Zotero (metadata, key theorems/equations, and your annotations).",
+    argsSchema: {},
+  },
+  () => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Build a literature note for the current paper using the obzo tools:`,
+            `1. current_paper for title/authors/abstract/attachmentKey.`,
+            `2. get_content (kind="statement" then "equation") for the key results; get_content(kind="figure") for figures.`,
+            `3. list_annotations for my highlights and comments.`,
+            `Compose a concise Markdown note: a short summary, the key theorems/definitions (math as LaTeX), and my annotated points. Then call insert_into_note (mode="create", note_path from the citekey) to save it.`,
+          ].join("\n"),
+        },
+      },
+    ],
+  })
 );
 
 async function main() {

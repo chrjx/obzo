@@ -13,8 +13,16 @@ reasoning; **no API key is needed here.** Obzo is just the context provider.
 | `list_annotations` | `attachmentKey?`, `color?`, `selectedOnly?` | Your highlights: text, comment, color, page, annotation key, `zotero://…?annotation=` backlink. `selectedOnly` returns just the annotation(s) selected in the reader right now. |
 | `get_content` | `attachmentKey?`, `kind?` (`equation`/`statement`/`figure`/`all`), `query?`, `limit?` | Extracted content from Obzo's MinerU cache, with ready-to-insert markdown + page. |
 | `get_fulltext` | `attachmentKey?`, `maxChars?` | The PDF's extracted text (Zotero fulltext index). |
+| `insert_into_note` | `markdown`, `note_path?`, `mode?` (`append`/`prepend`/`create`) | Writes Markdown into a vault note (defaults to the Obzo inbox). Returns the path. |
 
-`attachmentKey` defaults to the currently-open paper for every tool.
+`attachmentKey` defaults to the currently-open paper for every read tool.
+
+## Prompts (workflow templates)
+
+| Prompt | Args | What it does |
+| --- | --- | --- |
+| `summarize_annotation` | `kind?` | Turn the selected (or most recent) Zotero highlight into a clean definition/theorem/claim and insert it, with a backlink. |
+| `paper_note` | — | Draft a structured literature note for the current paper (metadata, key theorems/equations, your annotations) and save it. |
 
 ## Requirements
 
@@ -51,8 +59,10 @@ claude mcp add obzo \
 }
 ```
 
-Environment variables: `OBZO_VAULT` (for `get_content`), `OBZO_ZOTERO_PORT`
-(default `23119`), `OBZO_ZOTERO_USER` (default `0` — the local-API alias).
+Environment variables: `OBZO_VAULT` (for `get_content` and `insert_into_note`),
+`OBZO_INBOX` (default note for writes, default `Obzo Inbox.md`),
+`OBZO_ZOTERO_PORT` (default `23119`), `OBZO_ZOTERO_USER` (default `0` — the
+local-API alias).
 
 ## Example agent request
 
