@@ -4,6 +4,10 @@ import type ObzoPlugin from "./main";
 export interface ObzoSettings {
   /** Port of Zotero's local HTTP server (default 23119). */
   zoteroPort: number;
+  /** Zotero data directory (for reconstructing PDF paths without the bridge). */
+  zoteroDataDir: string;
+  /** Without the bridge, auto-track the most recently modified paper. */
+  autoTrackRecent: boolean;
   /** How often to poll Zotero for the current reader item, in ms. */
   pollIntervalMs: number;
   /** Free MinerU cloud API token (for equation -> LaTeX extraction). */
@@ -12,6 +16,8 @@ export interface ObzoSettings {
   anthropicApiKey: string;
   /** Master toggle for equation extraction (off = citations/terms/figures only). */
   enableEquations: boolean;
+  /** Which extractor backend to use (pluggable; MinerU is the first). */
+  extractorBackend: "mineru";
   /** Max size (MB) of the parsed-equation cache before least-recently-used papers are evicted. */
   cacheMaxMB: number;
   /** Append a zotero:// page backlink to inserted equations/figures/statements. */
@@ -32,6 +38,16 @@ export interface ObzoSettings {
   citationTrigger: string;
   /** Trigger string for paper-context autocomplete (terms/figures/equations). */
   paperTrigger: string;
+  /** Frontmatter property holding a note's Better BibTeX citekey. */
+  citekeyProperty: string;
+  /** Frontmatter property holding a note's Zotero item key. */
+  zoteroKeyProperty: string;
+  /** Folder for Obzo-created literature notes. */
+  literatureFolder: string;
+  /** Filename template for created literature notes (placeholders below). */
+  noteFilenameTemplate: string;
+  /** Body template for created literature notes. */
+  noteTemplate: string;
 }
 
 /** Preset insert templates. Placeholders are {name}; lines starting with `>`
@@ -55,10 +71,13 @@ export const FIGURE_TEMPLATES: Record<string, string> = {
 
 export const DEFAULT_SETTINGS: ObzoSettings = {
   zoteroPort: 23119,
+  zoteroDataDir: `${process.env.HOME ?? ""}/Zotero`,
+  autoTrackRecent: true,
   pollIntervalMs: 2000,
   mineruToken: "",
   anthropicApiKey: "",
   enableEquations: true,
+  extractorBackend: "mineru",
   cacheMaxMB: 25,
   insertBacklinks: true,
   statementFormat: "callout",
@@ -69,6 +88,24 @@ export const DEFAULT_SETTINGS: ObzoSettings = {
   figureTemplate: FIGURE_TEMPLATES["embed-caption"],
   citationTrigger: "@",
   paperTrigger: ";;",
+  citekeyProperty: "citekey",
+  zoteroKeyProperty: "zotero-key",
+  literatureFolder: "Zotero",
+  noteFilenameTemplate: "@{citekey}",
+  noteTemplate: [
+    "---",
+    "citekey: {citekey}",
+    "zotero-key: {zoteroKey}",
+    'title: "{title}"',
+    "authors: {authors}",
+    "year: {year}",
+    "---",
+    "",
+    "# {title}",
+    "",
+    "{abstract}",
+    "",
+  ].join("\n"),
 };
 
 export class ObzoSettingTab extends PluginSettingTab {
@@ -84,15 +121,25 @@ export class ObzoSettingTab extends PluginSettingTab {
 
     const status = containerEl.createEl("p", {
       cls: "obzo-settings-status",
-      text: "Checking Zotero connection…",
+      text: "Checking capabilities…",
     });
-    this.plugin.bridge.ping().then((ok) => {
+    void (async () => {
+      const bridge = await this.plugin.bridge.ping();
+      const zotero = bridge || (await this.plugin.bridge.zoteroAlive());
+      const extractor =
+        this.plugin.settings.enableEquations &&
+        !!this.plugin.settings.mineruToken;
+      const line = (on: boolean, name: string, hint: string) =>
+        on ? `✓ ${name}` : `○ ${name} — ${hint}`;
       status.setText(
-        ok
-          ? "✓ Connected to Zotero + Obzo Bridge."
-          : "✗ Obzo Bridge not found. Install the companion plugin in Zotero and restart it."
+        [
+          line(zotero, "Base (Zotero)", "start Zotero"),
+          line(bridge, "Live (Obzo Bridge)", "install the bridge xpi"),
+          line(extractor, "Content (extractor)", "set a MinerU token below"),
+        ].join("\n")
       );
-    });
+      status.style.whiteSpace = "pre-line";
+    })();
 
     new Setting(containerEl)
       .setName("Zotero port")
@@ -109,6 +156,34 @@ export class ObzoSettingTab extends PluginSettingTab {
               await this.plugin.saveSettings();
             }
           })
+      );
+
+    new Setting(containerEl)
+      .setName("Zotero data directory")
+      .setDesc(
+        "Used to locate PDF files when the Obzo Bridge isn't installed. Default ~/Zotero."
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder(`${process.env.HOME ?? ""}/Zotero`)
+          .setValue(this.plugin.settings.zoteroDataDir)
+          .onChange(async (v) => {
+            this.plugin.settings.zoteroDataDir = v.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Auto-track recent paper (no bridge)")
+      .setDesc(
+        "Without the Obzo Bridge, follow the most recently modified paper in Zotero. Turn off to only use the manually set paper."
+      )
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.autoTrackRecent).onChange(async (v) => {
+          this.plugin.settings.autoTrackRecent = v;
+          await this.plugin.saveSettings();
+          void this.plugin.refreshCurrent();
+        })
       );
 
     new Setting(containerEl)
@@ -154,6 +229,75 @@ export class ObzoSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    new Setting(containerEl)
+      .setName("Citekey property")
+      .setDesc(
+        "Frontmatter key that holds a note's citekey. Citations link to a note that has this (or the Zotero-key property)."
+      )
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.citekeyProperty)
+          .onChange(async (v) => {
+            this.plugin.settings.citekeyProperty = v.trim() || "citekey";
+            await this.plugin.saveSettings();
+            this.plugin.rebuildNoteIndex();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Zotero-key property")
+      .setDesc(
+        "Frontmatter key that holds a note's Zotero item key (the reliable match — works even without Better BibTeX)."
+      )
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.zoteroKeyProperty)
+          .onChange(async (v) => {
+            this.plugin.settings.zoteroKeyProperty = v.trim() || "zotero-key";
+            await this.plugin.saveSettings();
+            this.plugin.rebuildNoteIndex();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Literature-note folder")
+      .setDesc("Folder for notes created by Obzo (matches ZotLit's if you use it).")
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.literatureFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.literatureFolder = v.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Note filename template")
+      .setDesc("Placeholders: {citekey} {zoteroKey} {title} {year} {authors}.")
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.noteFilenameTemplate)
+          .onChange(async (v) => {
+            this.plugin.settings.noteFilenameTemplate = v || "@{citekey}";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Note body template")
+      .setDesc(
+        "Content for created notes. Placeholders: {citekey} {zoteroKey} {title} {authors} {year} {abstract} {doi} {url}."
+      )
+      .addTextArea((t) => {
+        t.setValue(this.plugin.settings.noteTemplate).onChange(async (v) => {
+          this.plugin.settings.noteTemplate = v;
+          await this.plugin.saveSettings();
+        });
+        t.inputEl.rows = 8;
+        t.inputEl.style.width = "100%";
+        t.inputEl.style.fontFamily = "var(--font-monospace)";
+      });
 
     new Setting(containerEl)
       .setName("Insert Zotero backlinks")

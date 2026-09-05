@@ -95,6 +95,20 @@ export class ObzoSuggest extends EditorSuggest<Suggestion> {
       return;
     }
 
+    // Create a literature note, then replace the trigger with a wikilink to it.
+    if (s.action === "create-note" && s.citeItemKey) {
+      const { editor, start, end } = ctx;
+      this.close();
+      void this.plugin.createNoteAndLink(
+        s.citeItemKey,
+        s.citeKey ?? "",
+        editor,
+        start,
+        end
+      );
+      return;
+    }
+
     const text = this.plugin.insertTextFor(s);
     ctx.editor.replaceRange(text, ctx.start, ctx.end);
     const lines = text.split("\n");

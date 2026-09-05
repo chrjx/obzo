@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, Editor, EditorPosition } from "obsidian";
 import {
   ObzoSettings,
   DEFAULT_SETTINGS,
@@ -24,8 +24,12 @@ import {
   normalizeMath,
 } from "./paper-index";
 import { ObzoSuggest } from "./suggest";
+import { PaperPickerModal } from "./picker";
+import { NoteIndex } from "./notes";
+import { TFile, normalizePath } from "obsidian";
+import { ZoteroItem } from "./zotero";
 import {
-  MineruExtractor,
+  createExtractor,
   ExtractedEquation,
   ExtractedFigure,
   ExtractedStatement,
@@ -39,6 +43,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+/** Availability of each optional capability layer (tier). */
+export interface Capabilities {
+  /** Tier 0: Zotero's local API is reachable. */
+  zotero: boolean;
+  /** Tier 1: the Obzo Bridge is installed (live tab tracking, page, selection). */
+  bridge: boolean;
+  /** Tier 2: an extractor is configured (MinerU token) for equations/theorems/figures. */
+  extractor: boolean;
+}
+
+/** Status-bar prefix reflecting how the current paper was resolved (its tier). */
+function sourcePrefix(r: CurrentReading): string {
+  switch (r.source) {
+    case "reader":
+      return "Obzo ▸ ";
+    case "manual":
+      return "Obzo 📌 ▸ ";
+    case "recent":
+      return "Obzo (recent) ▸ ";
+    case "selection":
+      return "Obzo (selected) ▸ ";
+    default:
+      return "Obzo ▸ ";
+  }
+}
+
 export default class ObzoPlugin extends Plugin {
   settings!: ObzoSettings;
   bridge!: ZoteroBridge;
@@ -47,6 +77,14 @@ export default class ObzoPlugin extends Plugin {
   current: CurrentReading | null = null;
   /** Extracted suggestion index for the current paper. */
   currentIndex: PaperIndex | null = null;
+  /** Manually-pinned paper (overrides recent auto-tracking when the bridge is absent). */
+  pinnedReading: CurrentReading | null = null;
+
+  /** Which capability tiers are currently available (updated each heartbeat). */
+  caps: Capabilities = { zotero: false, bridge: false, extractor: false };
+
+  /** Vault notes indexed by Zotero identifiers (for citation ↔ note linking). */
+  noteIndex!: NoteIndex;
 
   private statusEl!: HTMLElement;
   private pollHandle: number | null = null;
@@ -87,6 +125,21 @@ export default class ObzoPlugin extends Plugin {
     this.addSettingTab(new ObzoSettingTab(this.app, this));
     this.registerEditorSuggest(new ObzoSuggest(this));
 
+    // Index vault notes by Zotero id; keep it fresh as notes change.
+    this.noteIndex = new NoteIndex(this.app, () => ({
+      citekeyProp: this.settings.citekeyProperty,
+      zoteroKeyProp: this.settings.zoteroKeyProperty,
+    }));
+    this.app.workspace.onLayoutReady(() => this.noteIndex.rebuild());
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        if (file instanceof TFile) this.noteIndex.indexFile(file);
+      })
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("resolved", () => this.noteIndex.rebuild())
+    );
+
     this.addCommand({
       id: "obzo-refresh-current",
       name: "Refresh current paper from Zotero",
@@ -108,6 +161,44 @@ export default class ObzoPlugin extends Plugin {
       callback: () => void this.extractPaper(),
     });
 
+    this.addCommand({
+      id: "obzo-set-current-paper",
+      name: "Set current paper…",
+      callback: () => this.openPaperPicker(),
+    });
+
+    this.addCommand({
+      id: "obzo-clear-pinned-paper",
+      name: "Clear pinned paper (resume auto-tracking)",
+      callback: () => {
+        this.pinnedReading = null;
+        new Notice("Obzo: pinned paper cleared.");
+        this.refreshCurrent();
+      },
+    });
+
+    this.addCommand({
+      id: "obzo-status",
+      name: "Show status & capabilities",
+      callback: () => this.showStatus(),
+    });
+
+    this.addCommand({
+      id: "obzo-create-literature-note",
+      name: "Create (or open) literature note for current paper",
+      callback: () => {
+        void (async () => {
+          const item = this.current?.item;
+          if (!item) {
+            new Notice("Obzo: no current paper.");
+            return;
+          }
+          const file = await this.createLiteratureNote(item);
+          await this.app.workspace.getLeaf(false).openFile(file);
+        })();
+      },
+    });
+
     this.startPolling();
   }
 
@@ -115,18 +206,18 @@ export default class ObzoPlugin extends Plugin {
     this.stopPolling();
   }
 
-  // ---- update loop -------------------------------------------------------
+  // ---- update loop (tiered) ---------------------------------------------
   //
-  // Primary path is push: runEventLoop() blocks on the bridge's /obzo/wait
-  // endpoint and returns the instant Zotero's active tab changes. A slow
-  // heartbeat tick() runs alongside as a safety net (and detects the bridge
-  // coming back online). If the bridge is too old for /obzo/wait, we fall
-  // back to fast timer polling.
+  // Tier 1 (bridge present): runEventLoop() blocks on /obzo/wait and applies
+  //   the active reader tab the instant it changes (live push).
+  // Tier 0 (no bridge): the heartbeat tick() resolves the current paper from
+  //   a manually-pinned item, else the most recently modified paper via the
+  //   Zotero local API. Nothing hard-fails when the bridge is absent.
+  // The heartbeat always runs as the safety net and detects the bridge coming
+  // and going.
 
   startPolling() {
     void this.tick(true);
-    this.eventLoopRunning = true;
-    void this.runEventLoop();
     this.setHeartbeat(SLOW_HEARTBEAT_MS);
   }
 
@@ -144,6 +235,103 @@ export default class ObzoPlugin extends Plugin {
     this.startPolling();
   }
 
+  /** Re-resolve the current paper now (used by commands and settings). */
+  refreshCurrent() {
+    void this.tick(false);
+  }
+
+  /** Rebuild the note index (after the frontmatter-key settings change). */
+  rebuildNoteIndex() {
+    this.noteIndex?.rebuild();
+  }
+
+  /**
+   * Create a literature note for an item (or return the existing one, matched
+   * by Zotero key / citekey). Standalone — no ZotLit required.
+   */
+  async createLiteratureNote(item: ZoteroItem): Promise<TFile> {
+    const citekey = item.citationKey || generateCiteKey(item);
+    const existing = this.noteIndex?.lookup(item.key, citekey);
+    if (existing) return existing;
+
+    const fields = noteFields(item, citekey);
+    const folder = this.settings.literatureFolder.trim();
+    const name =
+      sanitizeFilename(fillTemplate(this.settings.noteFilenameTemplate, fields)) ||
+      citekey;
+    const dir = folder ? normalizePath(folder) : "";
+    if (dir && !this.app.vault.getAbstractFileByPath(dir)) {
+      await this.app.vault.createFolder(dir).catch(() => {});
+    }
+
+    let path = normalizePath(dir ? `${dir}/${name}.md` : `${name}.md`);
+    let n = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) {
+      path = normalizePath(dir ? `${dir}/${name} ${n}.md` : `${name} ${n}.md`);
+      n++;
+    }
+
+    const body = fillTemplate(this.settings.noteTemplate, fields);
+    const file = await this.app.vault.create(path, body);
+    this.noteIndex?.indexFile(file);
+    return file;
+  }
+
+  /** Fetch full item metadata by key, then create (or find) its note. */
+  async createLiteratureNoteByKey(itemKey: string): Promise<TFile | null> {
+    const reading = await this.bridge.readingForItem(
+      itemKey,
+      this.settings.zoteroDataDir
+    );
+    if (!reading?.item) return null;
+    return this.createLiteratureNote(reading.item);
+  }
+
+  /** Create the note for an item, then replace the trigger with a wikilink. */
+  async createNoteAndLink(
+    itemKey: string,
+    citekey: string,
+    editor: Editor,
+    start: EditorPosition,
+    end: EditorPosition
+  ): Promise<void> {
+    try {
+      const file = await this.createLiteratureNoteByKey(itemKey);
+      if (!file) {
+        new Notice("Obzo: couldn't load that item from Zotero.");
+        return;
+      }
+      const key = citekey || file.basename.replace(/^@/, "");
+      editor.replaceRange(wikilink(file, key), start, end);
+      new Notice(`Obzo: created ${file.basename}`);
+    } catch (e: any) {
+      new Notice(`Obzo: couldn't create note — ${e?.message ?? e}`);
+      console.error("[Obzo] create note failed", e);
+    }
+  }
+
+  /** Open the library picker to manually pin the current paper. */
+  openPaperPicker() {
+    new PaperPickerModal(
+      this.app,
+      (q) => this.bridge.searchLibrary(q, 20),
+      (hit) => {
+        void (async () => {
+          const reading = await this.bridge.readingForItem(
+            hit.key,
+            this.settings.zoteroDataDir
+          );
+          if (!reading) {
+            new Notice("Obzo: couldn't load that item from Zotero.");
+            return;
+          }
+          this.pinnedReading = reading;
+          this.applyReading(reading, true);
+        })();
+      }
+    ).open();
+  }
+
   private setHeartbeat(ms: number) {
     if (this.pollHandle !== null) window.clearInterval(this.pollHandle);
     this.pollHandle = window.setInterval(() => void this.tick(false), ms);
@@ -156,45 +344,66 @@ export default class ObzoPlugin extends Plugin {
       const res = await this.bridge.waitForChange();
       if (!this.eventLoopRunning) break;
       if (!res.ok) {
-        if (res.unsupported) {
-          // Old bridge without /obzo/wait — fall back to fast timer polling.
-          this.pushSupported = false;
-          this.eventLoopRunning = false;
-          this.setHeartbeat(Math.max(this.settings.pollIntervalMs, 1000));
-          break;
-        }
-        await sleep(3000); // transient error / bridge offline — back off
-        continue;
+        // Bridge went away or is too old for push — stop the loop; the
+        // heartbeat tick() takes over (and restarts push if it returns).
+        if (res.unsupported) this.pushSupported = false;
+        this.eventLoopRunning = false;
+        break;
       }
-      if (!this.bridgeOk) this.bridgeOk = true;
+      this.bridgeOk = true;
       this.applyReading(res.reading, false);
     }
   }
 
-  /** One-shot ping + fetch, used for the initial load and the heartbeat. */
+  /** Heartbeat: resolve the current paper via the best available tier. */
   private async tick(verbose: boolean) {
-    const ok = await this.bridge.ping();
-    if (ok !== this.bridgeOk) {
-      this.bridgeOk = ok;
-      if (!ok) this.setStatus("Obzo: Zotero bridge offline");
-    }
-    if (!ok) {
-      if (verbose) {
-        new Notice(
-          "Obzo: can't reach the Zotero bridge. Is Zotero running with the Obzo Bridge plugin?"
-        );
+    this.caps.extractor =
+      this.settings.enableEquations && !!this.settings.mineruToken;
+
+    const bridgeOk = await this.bridge.ping();
+    this.bridgeOk = bridgeOk;
+    this.caps.bridge = bridgeOk;
+
+    if (bridgeOk) {
+      this.caps.zotero = true;
+      // Tier 1: live. (Re)start the push loop if it isn't running.
+      if (this.pushSupported && !this.eventLoopRunning) {
+        this.eventLoopRunning = true;
+        void this.runEventLoop();
       }
+      this.applyReading(await this.bridge.current(), verbose);
       return;
     }
 
-    // Bridge is up: (re)start the push loop if it stopped while offline.
-    if (this.pushSupported && !this.eventLoopRunning) {
-      this.eventLoopRunning = true;
-      void this.runEventLoop();
-    }
+    // No bridge — fall back to Tier 0.
+    this.eventLoopRunning = false;
+    await this.resolveTier0(verbose);
+  }
 
-    const reading = await this.bridge.current();
-    this.applyReading(reading, verbose);
+  /** Tier 0 current-paper resolution: pinned item, else most-recent paper. */
+  private async resolveTier0(verbose: boolean) {
+    if (this.pinnedReading) {
+      this.applyReading(this.pinnedReading, verbose);
+      return;
+    }
+    const alive = await this.bridge.zoteroAlive();
+    this.caps.zotero = alive;
+    if (!alive) {
+      this.setStatus("Obzo: Zotero not reachable");
+      if (verbose) {
+        new Notice("Obzo: can't reach Zotero. Is Zotero running?");
+      }
+      return;
+    }
+    if (this.settings.autoTrackRecent) {
+      const reading = await this.bridge.recentReading(
+        this.settings.zoteroDataDir
+      );
+      this.applyReading(reading, verbose);
+    } else {
+      this.current = null;
+      this.setStatus('Obzo: run "Set current paper" to pick a paper');
+    }
   }
 
   /** Shared handling of a reading, whether pushed or polled. */
@@ -206,8 +415,7 @@ export default class ObzoPlugin extends Plugin {
     this.lastAttachmentKey = key;
 
     if (reading?.item) {
-      const prefix = reading.open ? "Obzo ▸ " : "Obzo (selected) ▸ ";
-      this.setStatus(prefix + itemLabel(reading));
+      this.setStatus(sourcePrefix(reading) + itemLabel(reading));
     } else {
       this.setStatus("Obzo: no paper open");
     }
@@ -361,33 +569,85 @@ export default class ObzoPlugin extends Plugin {
     if (q.length < 2) {
       const it = this.current?.item;
       if (it) {
-        const key = it.citationKey || generateCiteKey(it);
-        out.push({
-          kind: "citation",
-          label: `@${key}`,
-          detail: `${it.title ?? ""} (current paper)`.trim(),
-          insert: `[@${key}]`,
-          score: 1e6,
-        });
+        out.push(
+          this.citationSuggestion(it.citationKey, it.key, it.title, "(current paper)", 1e6, it)
+        );
+        if (!this.noteIndex?.lookup(it.key, it.citationKey)) {
+          out.push(this.createNoteSuggestion(it.citationKey, it.key, it, 1e6));
+        }
       }
       return out;
     }
 
     const hits = await this.bridge.searchLibrary(q, 20);
     for (const h of hits) {
-      const key = h.citationKey || generateCiteKey(h);
-      out.push({
-        kind: "citation",
-        label: `@${key}`,
-        detail: `${h.title} — ${creatorSummary(h)}`,
-        insert: `[@${key}]`,
-        score: 0,
-      });
+      out.push(
+        this.citationSuggestion(h.citationKey, h.key, h.title, creatorSummary(h), 0, h)
+      );
+      if (!this.noteIndex?.lookup(h.key, h.citationKey)) {
+        out.push(this.createNoteSuggestion(h.citationKey, h.key, h, 0));
+      }
     }
     return out;
   }
 
-  // ---- paper extraction (MinerU) ----------------------------------------
+  /**
+   * Build a citation suggestion in one of two modes:
+   *  - a matching literature note exists → insert a bidirectional [[wikilink]]
+   *  - no note → insert [@citekey](zotero://select/...) linking to Zotero.
+   */
+  private citationSuggestion(
+    citationKey: string | null,
+    itemKey: string,
+    title: string | null,
+    meta: string,
+    score: number,
+    forKeygen: { creators?: any[]; date?: string | null; title?: string | null }
+  ): Suggestion {
+    const key = citationKey || generateCiteKey(forKeygen);
+    const note = this.noteIndex?.lookup(itemKey, citationKey);
+    if (note) {
+      return {
+        kind: "citation",
+        label: `@${key}`,
+        detail: `→ ${note.basename}  ·  ${meta}`.trim(),
+        insert: wikilink(note, key),
+        score: score + 10, // prefer papers you already have notes for
+      };
+    }
+    const link = itemKey
+      ? `[@${key}](zotero://select/library/items/${itemKey})`
+      : `[@${key}]`;
+    return {
+      kind: "citation",
+      label: `@${key}`,
+      detail: `↗ Zotero  ·  ${title ?? ""} — ${meta}`.trim(),
+      insert: link,
+      score,
+    };
+  }
+
+  /** A "create & link literature note" row, offered when no note exists yet. */
+  private createNoteSuggestion(
+    citationKey: string | null,
+    itemKey: string,
+    forKeygen: { creators?: any[]; date?: string | null; title?: string | null },
+    score: number
+  ): Suggestion {
+    const key = citationKey || generateCiteKey(forKeygen);
+    return {
+      kind: "citation",
+      label: `＋ create & link note — @${key}`,
+      detail: "makes a literature note, then inserts a wikilink",
+      insert: "",
+      score: score - 1,
+      action: "create-note",
+      citeItemKey: itemKey,
+      citeKey: key,
+    };
+  }
+
+  // ---- paper extraction (pluggable backend) -----------------------------
 
   async extractPaper(): Promise<void> {
     const att = this.current?.attachment;
@@ -395,8 +655,12 @@ export default class ObzoPlugin extends Plugin {
       new Notice("Obzo: no PDF open in Zotero to extract from.");
       return;
     }
-    if (!this.settings.mineruToken) {
-      new Notice("Obzo: set your MinerU API token in the plugin settings first.");
+    const extractor = createExtractor({
+      backend: this.settings.extractorBackend,
+      mineruToken: this.settings.mineruToken,
+    });
+    if (!extractor) {
+      new Notice("Obzo: no extractor configured. Set a MinerU token in settings.");
       return;
     }
     if (this.extracting) {
@@ -405,13 +669,8 @@ export default class ObzoPlugin extends Plugin {
     }
 
     this.extracting = true;
-    const notice = new Notice("Obzo: extracting paper…", 0);
+    const notice = new Notice(`Obzo: extracting paper (${extractor.name})…`, 0);
     try {
-      const extractor = new MineruExtractor(this.settings.mineruToken, {
-        enableFormula: true,
-        enableTable: true,
-        language: "en",
-      });
       const content = await extractor.extract(att.path, (m) =>
         notice.setMessage(`Obzo: ${m}`)
       );
@@ -574,7 +833,42 @@ export default class ObzoPlugin extends Plugin {
 
   private setStatus(text: string) {
     this.statusEl.setText(text);
-    this.statusEl.setAttr("aria-label", text);
+    // Tooltip shows which capability tiers are active.
+    this.statusEl.setAttr("aria-label", `${text}\n${this.capabilitySummary()}`);
+  }
+
+  /** Human-readable summary of active/missing capability tiers. */
+  capabilitySummary(): string {
+    const mark = (on: boolean) => (on ? "✓" : "○");
+    return [
+      `${mark(this.caps.zotero)} Zotero (base)`,
+      `${mark(this.caps.bridge)} Bridge (live tab/page/selection)`,
+      `${mark(this.caps.extractor)} Extractor (equations/theorems/figures)`,
+    ].join("   ");
+  }
+
+  /** Notice with the current paper, active tiers, and how to enable missing ones. */
+  private showStatus() {
+    const lines: string[] = [];
+    lines.push(
+      this.current?.item
+        ? `Paper: ${itemLabel(this.current)}  (${this.current.source ?? "?"})`
+        : "Paper: none"
+    );
+    lines.push("");
+    lines.push(
+      `${this.caps.zotero ? "✓" : "○"} Base — Zotero local API` +
+        (this.caps.zotero ? "" : "  → start Zotero")
+    );
+    lines.push(
+      `${this.caps.bridge ? "✓" : "○"} Live — Obzo Bridge` +
+        (this.caps.bridge ? "" : "  → install the bridge xpi for live tab/page/selection")
+    );
+    lines.push(
+      `${this.caps.extractor ? "✓" : "○"} Content — extractor` +
+        (this.caps.extractor ? "" : "  → set a MinerU token in settings")
+    );
+    new Notice(lines.join("\n"), 10000);
   }
 
   // ---- settings ----------------------------------------------------------
@@ -737,6 +1031,43 @@ function figureSuggestion(
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Bidirectional wikilink to a literature note, aliased to the @citekey. */
+function wikilink(note: TFile, citekey: string): string {
+  return `[[${note.basename}|@${citekey}]]`;
+}
+
+/** Placeholder fields for literature-note filename/body templates. */
+function noteFields(item: ZoteroItem, citekey: string): Record<string, string> {
+  const authors = (item.creators ?? [])
+    .filter((c) => !c.creatorType || c.creatorType === "author")
+    .map((c) => [c.lastName, c.firstName].filter(Boolean).join(", "))
+    .filter(Boolean)
+    .join("; ");
+  return {
+    citekey,
+    zoteroKey: item.key,
+    title: (item.title ?? "").replace(/"/g, "'"),
+    authors,
+    year: item.date?.match(/\d{4}/)?.[0] ?? "",
+    abstract: item.abstractNote ?? "",
+    doi: item.DOI ?? "",
+    url: item.url ?? "",
+  };
+}
+
+/** Fill a {placeholder} template (reuses the insert-template renderer). */
+function fillTemplate(tpl: string, fields: Record<string, string>): string {
+  return renderTemplate(tpl, fields);
+}
+
+/** Strip characters not allowed in vault filenames. */
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[\\/:*?"<>|#^[\]]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function toArrayBuffer(u8: Uint8Array): ArrayBuffer {

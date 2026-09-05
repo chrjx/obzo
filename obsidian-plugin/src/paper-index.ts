@@ -25,7 +25,10 @@ export interface Suggestion {
   /** Ranking score (higher = shown first). */
   score: number;
   /** If set, selecting runs an action instead of inserting text. */
-  action?: "extract-equations";
+  action?: "extract-equations" | "create-note";
+  /** For the create-note action: the Zotero item key + citekey to create. */
+  citeItemKey?: string;
+  citeKey?: string;
   /** For equations: the number from \tag{…} (e.g. "1", "2.2"), searchable. */
   eqNum?: string;
   /** For equations: normalized LaTeX for symbol matching ("x_t=x_0+..."). */

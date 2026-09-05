@@ -39,6 +39,20 @@ export interface ExtractedContent {
 
 export type ProgressFn = (msg: string) => void;
 
+/**
+ * A pluggable PDF content extractor. MinerU (cloud) is the first implementation;
+ * a local/offline backend can be added behind this same interface without
+ * touching the rest of the plugin.
+ */
+export interface Extractor {
+  /** Short backend id for logs/UI (e.g. "MinerU"). */
+  readonly name: string;
+  /** Whether the backend has what it needs to run (token, binary, …). */
+  isConfigured(): boolean;
+  /** Upload/parse a PDF into structured content. */
+  extract(pdfPath: string, onProgress?: ProgressFn): Promise<ExtractedContent>;
+}
+
 export interface MineruOptions {
   enableFormula?: boolean;
   enableTable?: boolean;
@@ -55,8 +69,13 @@ const API = "https://mineru.net/api/v4";
  *
  * Note: the PDF is uploaded to MinerU's servers.
  */
-export class MineruExtractor {
+export class MineruExtractor implements Extractor {
+  readonly name = "MinerU";
   constructor(private token: string, private opts: MineruOptions = {}) {}
+
+  isConfigured(): boolean {
+    return !!this.token;
+  }
 
   private apiHeaders() {
     return {
@@ -158,6 +177,27 @@ export class MineruExtractor {
 
 const STATEMENT_RE =
   /^(Theorem|Definition|Lemma|Proposition|Corollary|Assumption|Claim|Condition|Hypothesis|Remark|Example)\s*([0-9]+(?:\.[0-9]+)?|[A-Z])?\.?/;
+
+/** Config the factory needs to build the selected extractor backend. */
+export interface ExtractorConfig {
+  backend: "mineru";
+  mineruToken: string;
+}
+
+/** Build the configured extractor, or null if it isn't set up. */
+export function createExtractor(cfg: ExtractorConfig): Extractor | null {
+  switch (cfg.backend) {
+    case "mineru":
+    default: {
+      if (!cfg.mineruToken) return null;
+      return new MineruExtractor(cfg.mineruToken, {
+        enableFormula: true,
+        enableTable: true,
+        language: "en",
+      });
+    }
+  }
+}
 
 /** Parse equations, figures and labeled statements from the MinerU result zip. */
 function parseContentFromZip(zip: Uint8Array): ExtractedContent {

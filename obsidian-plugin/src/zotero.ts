@@ -132,6 +132,118 @@ export class ZoteroBridge {
       .map(mapSearchHit)
       .filter((h) => h.itemType !== "attachment" && h.itemType !== "note");
   }
+
+  // ---- Tier 0: works via the stable local API, no bridge xpi ------------
+
+  /** Is Zotero's local API reachable at all (bridge not required)? */
+  async zoteroAlive(): Promise<boolean> {
+    const res = await this.get("/api/users/0/items/top?limit=1");
+    return !!res && res.status === 200;
+  }
+
+  private async itemData(key: string): Promise<any | null> {
+    const res = await this.get(`/api/users/0/items/${key}`);
+    if (!res || res.status !== 200) return null;
+    return res.json as any;
+  }
+
+  /** The best PDF attachment for a top-level item (or the item itself if it is one). */
+  async bestAttachment(
+    itemKey: string,
+    dataDir: string
+  ): Promise<ZoteroAttachment | null> {
+    const res = await this.get(
+      `/api/users/0/items/${itemKey}/children?itemType=attachment`
+    );
+    const rows = res && res.status === 200 ? (res.json as any[]) : [];
+    const pdf =
+      rows.find((r) => r?.data?.contentType === "application/pdf") ?? rows[0];
+    if (!pdf) return null;
+    return attachmentFromData(pdf.key, pdf.data, dataDir);
+  }
+
+  /** Build a CurrentReading for a top-level item key (used by the manual picker). */
+  async readingForItem(
+    itemKey: string,
+    dataDir: string
+  ): Promise<CurrentReading | null> {
+    const raw = await this.itemData(itemKey);
+    if (!raw) return null;
+    const attachment = await this.bestAttachment(itemKey, dataDir);
+    return {
+      open: false,
+      source: "manual",
+      item: itemFromData(raw),
+      attachment,
+    };
+  }
+
+  /**
+   * Best-effort "current paper" without the bridge: the most recently modified
+   * PDF attachment in the library (a proxy for recently opened/annotated).
+   */
+  async recentReading(dataDir: string): Promise<CurrentReading | null> {
+    const res = await this.get(
+      "/api/users/0/items?itemType=attachment&sort=dateModified&direction=desc&limit=10"
+    );
+    const rows = res && res.status === 200 ? (res.json as any[]) : [];
+    const pdf = rows.find((r) => r?.data?.contentType === "application/pdf");
+    if (!pdf) return null;
+    const attachment = attachmentFromData(pdf.key, pdf.data, dataDir);
+    const parentKey = pdf.data?.parentItem;
+    const parent = parentKey ? await this.itemData(parentKey) : null;
+    return {
+      open: false,
+      source: "recent",
+      item: parent ? itemFromData(parent) : null,
+      attachment,
+    };
+  }
+}
+
+/** Map a local-API attachment `data` object to our ZoteroAttachment, with the
+ *  file path reconstructed from Zotero's deterministic storage layout. */
+function attachmentFromData(
+  key: string,
+  d: any,
+  dataDir: string
+): ZoteroAttachment {
+  const filename = d?.filename ?? null;
+  const path =
+    dataDir && filename
+      ? `${dataDir.replace(/\/$/, "")}/storage/${key}/${filename}`
+      : null;
+  return {
+    key,
+    libraryID: d?.libraryID ?? 1,
+    contentType: d?.contentType ?? null,
+    filename,
+    path,
+  };
+}
+
+/** Map a local-API item `data`/`meta` object to our ZoteroItem shape. */
+function itemFromData(row: any): ZoteroItem {
+  const d = row?.data ?? row ?? {};
+  return {
+    key: d.key ?? row?.key ?? "",
+    libraryID: d.libraryID ?? 1,
+    itemType: d.itemType ?? null,
+    title: d.title ?? null,
+    date: d.date ?? null,
+    DOI: d.DOI ?? null,
+    url: d.url ?? null,
+    publicationTitle: d.publicationTitle ?? null,
+    abstractNote: d.abstractNote ?? null,
+    creators: Array.isArray(d.creators)
+      ? d.creators.map((c: any) => ({
+          firstName: c.firstName ?? "",
+          lastName: c.lastName ?? c.name ?? "",
+          creatorType: c.creatorType ?? null,
+        }))
+      : [],
+    citationKey: row?.meta?.citationKey ?? null,
+  };
 }
 
 function mapSearchHit(row: any): ZoteroSearchHit {
