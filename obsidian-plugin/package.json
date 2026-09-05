@@ -1,6 +1,6 @@
 {
   "name": "obzo-complete",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Zotero-aware completions and context for Obsidian.",
   "scripts": {
