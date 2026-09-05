@@ -53,7 +53,7 @@ async function readCache(): Promise<Record<string, any>> {
     VAULT,
     ".obsidian",
     "plugins",
-    "obzo-complete",
+    "obzo",
     "equation-cache.json"
   );
   try {

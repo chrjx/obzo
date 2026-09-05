@@ -1,5 +1,5 @@
 {
-  "name": "obzo-complete",
+  "name": "obzo",
   "version": "0.0.1",
   "private": true,
   "description": "Zotero-aware completions and context for Obsidian.",

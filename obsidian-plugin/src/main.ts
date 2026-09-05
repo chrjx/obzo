@@ -744,7 +744,7 @@ export default class ObzoPlugin extends Plugin {
   }
 
   private cachePath(): string {
-    return `${this.app.vault.configDir}/plugins/obzo-complete/equation-cache.json`;
+    return `${this.app.vault.configDir}/plugins/obzo/equation-cache.json`;
   }
 
   private async loadEqCache(): Promise<void> {

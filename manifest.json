@@ -1,9 +1,9 @@
 {
-  "id": "obzo-complete",
+  "id": "obzo",
   "name": "Obzo",
   "version": "0.0.1",
   "minAppVersion": "1.4.0",
-  "description": "Context-aware completions and Zotero context \u2014 equations, theorems, citations, figures \u2014 from the paper open in your Zotero reader.",
+  "description": "Context-aware completions from the Zotero paper you're reading: citations, equations, theorems, and figures.",
   "author": "Changrong Xue",
   "isDesktopOnly": true
 }

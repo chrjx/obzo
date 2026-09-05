@@ -25,7 +25,7 @@ Install the **BRAT** plugin, then *Add beta plugin* with this repository URL.
 ### Manually
 Download `manifest.json`, `main.js`, and `styles.css` from the
 [latest release](../../releases/latest) into
-`<vault>/.obsidian/plugins/obzo-complete/`, then enable it in
+`<vault>/.obsidian/plugins/obzo/`, then enable it in
 **Settings → Community plugins**.
 
 ## Usage

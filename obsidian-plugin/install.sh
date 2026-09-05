@@ -5,7 +5,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${1:-/Users/chrix/Documents/Obsidian}"
-DEST="$VAULT/.obsidian/plugins/obzo-complete"
+DEST="$VAULT/.obsidian/plugins/obzo"
 
 if [ ! -f "$HERE/main.js" ]; then
   echo "main.js not found — run 'npm run build' first." >&2
