@@ -1,97 +1,80 @@
 # Obzo
 
 Read what you're reading in Zotero, and get context-aware completions in
-Obsidian: **equations (as LaTeX), theorems/definitions, citations, and
+Obsidian: **citations, equations (as LaTeX), theorems/definitions, and
 figures** sourced from the paper open in your Zotero reader.
 
-## How it works
+Obzo is designed in **tiers** — it works with just the plugin, and gets more
+capable as you add optional pieces. None of the optional layers are required.
 
-Two installable pieces, both JavaScript/TypeScript — no Python required.
+| Tier | You add | You get |
+| --- | --- | --- |
+| **Base** | the plugin + Zotero running | citations ↔ literature notes, term/figure references, current-paper tracking, library search |
+| **Live** | the Obzo Bridge (Zotero plugin) | instant active-tab tracking, current page, selected annotations |
+| **Content** | a MinerU token | equations, theorems/definitions, and figures extracted from the PDF |
+| **Agent** | an MCP client (Claude Code / Codex / Cursor) | summarize highlights, draft literature notes — on your own subscription, no API key |
 
-```
-┌────────────────────────┐   GET /obzo/current   ┌──────────────────────────┐
-│  Zotero companion      │◄──────────────────────│  Obsidian plugin         │
-│  plugin  (JS bootstrap)│   "which PDF is open?" │  (TypeScript)            │
-│  • hooks the reader    │──────────────────────►│  • EditorSuggest UI      │
-│  • serves endpoints on │  { key, path, title,   │  • current-paper tracker │
-│    Zotero's :23119     │    citekey, abstract } │  • extractor + cache     │
-└────────────────────────┘                        └────────────┬─────────────┘
-                                                                │
-   Zotero local API  (:23119/api/...)  ◄──── citations / metadata┤
-   MinerU cloud API                    ◄──── equation LaTeX ─────┤
-   pdf.js text / Zotero fulltext       ◄──── terms, figures ─────┘
-```
+## Install
 
-1. The **Zotero companion plugin** (`zotero-plugin/`) registers
-   `GET /obzo/current` on Zotero's built-in HTTP server. It reports the
-   attachment open in the active reader tab, its file path, and the parent
-   item's metadata (title, creators, DOI, abstract, Better BibTeX citekey).
-2. The **Obsidian plugin** (`obsidian-plugin/`) polls that endpoint, extracts
-   structured content from the PDF, and drives an `EditorSuggest` autocomplete:
-   - **Citations** — from the Zotero local API + Better BibTeX citekeys.
-   - **Terms / definitions** — from the PDF text layer (pdf.js / Zotero's
-     stored fulltext).
-   - **Figures / sections** — parsed from captions and headings.
-   - **Equations** — real LaTeX via the free **MinerU** cloud API, cached per
-     attachment. A local/offline extractor can be swapped in later for
-     sensitive PDFs (MinerU cloud uploads the file to their servers).
+### From the Community Plugins store
+Once accepted: **Settings → Community plugins → Browse → "Obzo" → Install → Enable**.
 
-## Repo layout
+### Via BRAT (before it's in the store)
+Install the **BRAT** plugin, then *Add beta plugin* with this repository URL.
 
-| Path              | What                                                        |
-| ----------------- | ---------------------------------------------------------- |
-| `zotero-plugin/`  | Zotero 7 bootstrap plugin exposing `/obzo/*` endpoints.    |
-| `obsidian-plugin/`| The Obsidian plugin (TypeScript, esbuild).                 |
-| `dist/`           | Build outputs (`obzo-bridge.xpi`).                         |
+### Manually
+Download `manifest.json`, `main.js`, and `styles.css` from the
+[latest release](../../releases/latest) into
+`<vault>/.obsidian/plugins/obzo-complete/`, then enable it in
+**Settings → Community plugins**.
 
-## Component 1 — Zotero companion plugin
+## Usage
 
-Endpoints (on `http://127.0.0.1:23119`):
+With a paper open in Zotero (or after running **"Obzo: Set current paper…"**):
 
-- `GET /obzo/ping` → `{ ok, plugin, version }`
-- `GET /obzo/current` → the active reader item, e.g.:
+- Type **`@`** for citations — inserts a bidirectional `[[wikilink]]` if you
+  have a literature note for that paper, otherwise a `zotero://` link (with an
+  inline option to create & link a note).
+- Type **`;;`** for content from the current paper — terms, figure/section
+  references, and (with a MinerU token) equations, theorems, and figures. Insert
+  formats are configurable, and each insert can carry a `zotero://` page backlink.
 
-```json
-{
-  "open": true,
-  "source": "reader",
-  "page": 3,
-  "item": {
-    "key": "GGBK5Z5D",
-    "title": "AlphaAgent: LLM-Driven Alpha Mining",
-    "creators": [{ "firstName": "…", "lastName": "Tang" }],
-    "DOI": "…",
-    "abstractNote": "…",
-    "citationKey": "tang2025alphaagent"
-  },
-  "attachment": {
-    "key": "…",
-    "contentType": "application/pdf",
-    "path": "/Users/chrix/Zotero/storage/…/paper.pdf"
-  }
-}
-```
+Commands: *Set current paper*, *Clear pinned paper*, *Create literature note*,
+*Extract paper (MinerU)*, *Show status & capabilities*.
 
-### Build & install
+## Optional companions
+
+These live in this repo and enable the higher tiers:
+
+| Path | What it enables |
+| --- | --- |
+| `zotero-plugin/` | **Obzo Bridge** — a Zotero plugin adding live tab tracking, current page, and selected annotations. Build with `bash zotero-plugin/build.sh` → install the resulting `.xpi` in Zotero. |
+| `obzo-mcp/` | **MCP server** — exposes the current paper, annotations, and extracted content to any MCP client, plus tools/prompts to write notes on your subscription. See `obzo-mcp/README.md`. |
+
+Without them, Obzo falls back to Zotero's local API (recent paper / manual
+picker) and works fine — run **"Obzo: Show status & capabilities"** to see which
+tiers are active.
+
+## Development
 
 ```bash
-bash zotero-plugin/build.sh          # -> dist/obzo-bridge.xpi
+cd obsidian-plugin
+npm install
+npm run dev          # watch build → main.js
+bash install.sh      # copy manifest.json (root) + main.js + styles.css to your vault
 ```
 
-Then in Zotero: **Tools → Plugins → gear (⚙) → Install Plugin From File…**,
-choose `dist/obzo-bridge.xpi`, and restart Zotero. Verify:
+### Releasing
 
 ```bash
-curl -s http://127.0.0.1:23119/obzo/ping
-# open a PDF in Zotero, then:
-curl -s http://127.0.0.1:23119/obzo/current
+node scripts/version-bump.mjs 0.2.0     # update manifest.json + versions.json
+git commit -am "0.2.0" && git tag 0.2.0 && git push --follow-tags
 ```
 
-## Component 2 — Obsidian plugin
+Pushing the tag runs `.github/workflows/release.yml`, which builds the plugin
+and attaches `manifest.json`, `main.js`, and `styles.css` to a GitHub release
+named for the version — the format the Community Plugins store expects.
 
-See `obsidian-plugin/` (built next). Installs into
-`/Users/chrix/Documents/Obsidian/.obsidian/plugins/obzo-complete/`.
+## License
 
-## Status
-
-Phased build — see the task list. Current: Zotero companion plugin.
+MIT — see [LICENSE](LICENSE).
