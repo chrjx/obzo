@@ -12,6 +12,7 @@ reasoning; **no API key is needed here.** Obzo is just the context provider.
 | `current_paper` | — | The paper open in Zotero's reader: title, authors, DOI, abstract, `attachmentKey`, current `page`, and `selectedAnnotations` (keys selected in the reader). |
 | `list_annotations` | `attachmentKey?`, `color?`, `selectedOnly?` | Your highlights: text, comment, color, page, annotation key, `zotero://…?annotation=` backlink. `selectedOnly` returns just the annotation(s) selected in the reader right now. |
 | `get_content` | `attachmentKey?`, `kind?` (`equation`/`statement`/`figure`/`all`), `query?`, `limit?` | Extracted content from Obzo's MinerU cache, with ready-to-insert markdown + page. |
+| `get_blocks` | `attachmentKey?`, `query?`, `limit?` | Prose blocks (paragraph + its equations + section heading). Read them, semantically pick the one matching the user's phrase, insert its markdown. |
 | `get_fulltext` | `attachmentKey?`, `maxChars?` | The PDF's extracted text (Zotero fulltext index). |
 | `insert_into_note` | `markdown`, `note_path?`, `mode?` (`append`/`prepend`/`create`) | Writes Markdown into a vault note (defaults to the Obzo inbox). Returns the path. |
 
@@ -59,10 +60,28 @@ claude mcp add obzo \
 }
 ```
 
-Environment variables: `OBZO_VAULT` (for `get_content` and `insert_into_note`),
-`OBZO_INBOX` (default note for writes, default `Obzo Inbox.md`),
-`OBZO_ZOTERO_PORT` (default `23119`), `OBZO_ZOTERO_USER` (default `0` — the
-local-API alias).
+Environment variables: `OBZO_VAULT` (for `get_content`, `get_blocks`, and
+`insert_into_note`), `OBZO_INBOX` (default note for writes, default
+`Obzo Inbox.md`), `OBZO_ZOTERO_PORT` (default `23119`), `OBZO_ZOTERO_USER`
+(default `0` — the local-API alias).
+
+## Running on a local agent (your subscription, no API key)
+
+Both major coding agents run **locally on your existing subscription** and can
+drive this server — no Anthropic/OpenAI API key required:
+
+- **Claude Code** authenticates with your **Claude Pro/Max** login. Add the
+  server with `claude mcp add obzo …` (above); drive it interactively, or
+  headless with `claude -p "…"` for scripting. Claude Code can also *be* an MCP
+  server (`claude mcp serve`).
+- **Codex** runs on your **ChatGPT** plan via its local app/CLI; point its MCP
+  config at the JSON above.
+- **Claudian** embeds these agent CLIs *inside Obsidian*, so the whole
+  read → reason → write loop happens in your vault on your subscription.
+
+This is why Obzo is a context provider, not an LLM caller: the agent you already
+pay for does the reasoning, and Obzo supplies the paper, annotations, extracted
+content, and blocks — and writes the result back with `insert_into_note`.
 
 ## Example agent request
 

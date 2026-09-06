@@ -224,6 +224,50 @@ server.registerTool(
 );
 
 server.registerTool(
+  "get_blocks",
+  {
+    description:
+      "Prose blocks (a paragraph plus its equations, tagged with the section heading) for the current paper, from Obzo's cache. Use this to import a whole block by meaning: read the blocks, pick the one matching the user's phrase/concept, and return its markdown. Optional query does a lexical prefilter; you do the semantic selection.",
+    inputSchema: {
+      attachmentKey: z.string().optional(),
+      query: z.string().optional(),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ attachmentKey, query, limit }) => {
+    try {
+      const key = await resolveKey(attachmentKey);
+      const entry = (await readCache())[key];
+      const blocks: any[] = entry?.blocks ?? [];
+      if (blocks.length === 0) {
+        return text({
+          attachmentKey: key,
+          note: "No blocks cached — run 'Extract paper' in Obsidian first.",
+          blocks: [],
+        });
+      }
+      let items = blocks.map((b) => ({
+        heading: b.heading,
+        page: typeof b.page === "number" ? b.page + 1 : undefined,
+        markdown: b.text, // paragraph + equations, ready to insert
+      }));
+      if (query) {
+        const q = query.toLowerCase();
+        items = items.filter(
+          (b) =>
+            (b.heading ?? "").toLowerCase().includes(q) ||
+            (b.markdown ?? "").toLowerCase().includes(q)
+        );
+      }
+      items = items.slice(0, typeof limit === "number" ? limit : 50);
+      return text({ attachmentKey: key, count: items.length, blocks: items });
+    } catch (e) {
+      return errText(e);
+    }
+  }
+);
+
+server.registerTool(
   "get_fulltext",
   {
     description:

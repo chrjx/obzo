@@ -34,6 +34,8 @@ import {
   ExtractedFigure,
   ExtractedStatement,
 } from "./mineru";
+import { createEmbedder, cosine } from "./embedder";
+import { BlockImportModal, BlockHit } from "./blocks-modal";
 import { promises as fs } from "fs";
 
 /** Safety-heartbeat cadence while push (long-poll) updates are active. */
@@ -41,6 +43,14 @@ const SLOW_HEARTBEAT_MS = 15000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/** A prose block (paragraph + equations) with its heading and cached vector. */
+export interface BlockEntry {
+  heading: string | null;
+  text: string;
+  page: number | null;
+  vector?: number[];
 }
 
 /** Availability of each optional capability layer (tier). */
@@ -100,7 +110,7 @@ export default class ObzoPlugin extends Plugin {
   /** Monotonic token so a slow rebuild can't overwrite a newer paper's index. */
   private indexSeq = 0;
 
-  /** Cached extracted content (equations/statements/figures) per attachment. */
+  /** Cached extracted content (equations/statements/figures/blocks) per attachment. */
   private eqCache: Map<
     string,
     {
@@ -108,6 +118,7 @@ export default class ObzoPlugin extends Plugin {
       equations: Suggestion[];
       statements: Suggestion[];
       figures: Suggestion[];
+      blocks: BlockEntry[];
       lastUsed: number;
     }
   > = new Map();
@@ -165,6 +176,25 @@ export default class ObzoPlugin extends Plugin {
       id: "obzo-set-current-paper",
       name: "Set current paper…",
       callback: () => this.openPaperPicker(),
+    });
+
+    this.addCommand({
+      id: "obzo-import-block",
+      name: "Import block from current paper…",
+      editorCallback: (editor) => {
+        if (!this.hasBlocks()) {
+          new Notice(
+            'Obzo: no blocks for this paper yet — run "Extract paper" first.'
+          );
+          return;
+        }
+        new BlockImportModal(
+          this.app,
+          editor,
+          (q) => this.searchBlocks(q),
+          (hit, ed) => this.insertBlock(hit, ed)
+        ).open();
+      },
     });
 
     this.addCommand({
@@ -512,7 +542,7 @@ export default class ObzoPlugin extends Plugin {
     const combined: PaperIndex = {
       attachmentKey: attKey ?? "",
       title: index?.title ?? "",
-      terms: index?.terms ?? [],
+      terms: [], // frequency-based terms removed — noisy next to real content
       refs: index?.refs ?? [],
       equations: cachedPool,
     };
@@ -647,6 +677,86 @@ export default class ObzoPlugin extends Plugin {
     };
   }
 
+  // ---- semantic block search --------------------------------------------
+
+  /** Whether the current paper has importable blocks cached. */
+  hasBlocks(): boolean {
+    const key = this.current?.attachment?.key;
+    return !!key && (this.eqCache.get(key)?.blocks.length ?? 0) > 0;
+  }
+
+  /**
+   * Rank the current paper's blocks against a query. Uses Voyage embeddings
+   * (semantic) when a key is set, always layering a heading/text lexical boost;
+   * falls back to pure lexical matching without a key.
+   */
+  async searchBlocks(query: string): Promise<BlockHit[]> {
+    const key = this.current?.attachment?.key;
+    if (!key) return [];
+    const entry = this.eqCache.get(key);
+    if (!entry || entry.blocks.length === 0) return [];
+    const blocks = entry.blocks;
+    const q = query.trim().toLowerCase();
+
+    let queryVec: number[] | null = null;
+    const embedder = createEmbedder({
+      backend: this.settings.embedderBackend,
+      voyageApiKey: this.settings.voyageApiKey,
+      voyageModel: this.settings.embedModel,
+      ollamaUrl: this.settings.ollamaUrl,
+      ollamaModel: this.settings.ollamaModel,
+    });
+    if (embedder && q.length >= 2) {
+      // Embed the query first (cheap) — its dimension identifies the model.
+      const [qv] = await embedder.embed([query], "query");
+      queryVec = qv ?? null;
+      const dim = qv?.length ?? 0;
+      // Re-embed blocks if missing, or if cached vectors came from a different
+      // model (dimension mismatch after switching backend/model).
+      const stale =
+        !!blocks[0]?.vector && dim > 0 && blocks[0].vector!.length !== dim;
+      if (dim > 0 && (blocks.some((b) => !b.vector) || stale)) {
+        const texts = blocks.map((b) => (b.heading ? b.heading + ". " : "") + b.text);
+        const vecs = await embedder.embed(texts, "document");
+        blocks.forEach((b, i) => (b.vector = vecs[i]));
+        await this.saveEqCache();
+      }
+    }
+
+    const scored = blocks.map((b) => {
+      let score = queryVec && b.vector ? cosine(queryVec, b.vector) : 0;
+      if (q) {
+        const heading = (b.heading ?? "").toLowerCase();
+        if (heading.includes(q)) score += 0.6; // heading match is a strong signal
+        else if (b.text.toLowerCase().includes(q)) score += 0.3;
+      }
+      return { b, score };
+    });
+
+    const ranked = q
+      ? scored.filter((x) => x.score > 0.05)
+      : scored; // empty query → browse all
+    ranked.sort((a, b) => b.score - a.score);
+    return ranked.slice(0, 25).map((x) => ({
+      heading: x.b.heading,
+      text: x.b.text,
+      page: x.b.page,
+    }));
+  }
+
+  /** Insert a block's markdown (paragraph + equations) into the active note. */
+  insertBlock(hit: BlockHit, editor: Editor) {
+    let text = hit.text.replace(/\n*$/, "") + "\n";
+    if (this.settings.insertBacklinks && typeof hit.page === "number") {
+      const key = this.current?.attachment?.key;
+      if (key) {
+        const p = hit.page + 1;
+        text += `[📄 p.${p}](zotero://open-pdf/library/items/${key}?page=${p})\n`;
+      }
+    }
+    editor.replaceSelection(text);
+  }
+
   // ---- paper extraction (pluggable backend) -----------------------------
 
   async extractPaper(): Promise<void> {
@@ -687,13 +797,18 @@ export default class ObzoPlugin extends Plugin {
         equations,
         statements,
         figures,
+        blocks: content.blocks.map((b) => ({
+          heading: b.heading,
+          text: b.text,
+          page: b.page,
+        })),
         lastUsed: Date.now(),
       });
       this.enforceCacheLimit(att.key);
       await this.saveEqCache();
 
       notice.setMessage(
-        `Obzo: ${equations.length} equations, ${statements.length} statements, ${figures.length} figures ready — type "${this.settings.paperTrigger}".`
+        `Obzo: ${equations.length} equations, ${statements.length} statements, ${figures.length} figures, ${content.blocks.length} blocks ready.`
       );
       window.setTimeout(() => notice.hide(), 6000);
     } catch (e: any) {
@@ -757,6 +872,7 @@ export default class ObzoPlugin extends Plugin {
           equations?: Suggestion[];
           statements?: Suggestion[];
           figures?: Suggestion[];
+          blocks?: BlockEntry[];
           lastUsed?: number;
         }
       >;
@@ -768,6 +884,7 @@ export default class ObzoPlugin extends Plugin {
             equations: (v.equations ?? []).map(normalizeEqSuggestion),
             statements: (v.statements ?? []).map(backfillPage).map(backfillRender),
             figures: (v.figures ?? []).map(backfillPage).map(backfillRender),
+            blocks: v.blocks ?? [],
             lastUsed: v.lastUsed ?? 0,
           },
         ])
@@ -968,7 +1085,7 @@ function statementSuggestion(s: ExtractedStatement, index: number): Suggestion {
   const body = s.text
     .replace(/\$\$[\s\S]*?\$\$/g, " ") // drop display math from the preview
     .replace(/\s+/g, " ")
-    .replace(new RegExp("^" + escapeRegExp(label) + "\\.?\\s*"), "")
+    .replace(new RegExp("^" + escapeRegExp(label) + "[.:]?\\s*", "i"), "")
     .trim();
   const shown = body ? `${label} — ${body}` : label;
   const display = shown.length > 84 ? shown.slice(0, 83) + "…" : shown;
@@ -976,7 +1093,7 @@ function statementSuggestion(s: ExtractedStatement, index: number): Suggestion {
   const aliases = STATEMENT_ALIASES[s.kind.toLowerCase()] ?? s.kind.toLowerCase();
   // Statement text without the leading "Theorem 1." (the label carries it).
   const renderBody = s.text
-    .replace(new RegExp("^" + escapeRegExp(label) + "\\.?\\s*"), "")
+    .replace(new RegExp("^" + escapeRegExp(label) + "[.:]?\\s*", "i"), "")
     .trim();
   const render: SuggestionRender = {
     type: "statement",
@@ -1173,7 +1290,7 @@ function backfillRender(s: Suggestion): Suggestion {
       .map((l) => l.replace(/^>\s?/, ""))
       .join("\n")
       .trim()
-      .replace(new RegExp("^" + escapeRegExp(label) + "\\.?\\s*"), "")
+      .replace(new RegExp("^" + escapeRegExp(label) + "[.:]?\\s*", "i"), "")
       .trim();
     const number = label.match(/\d+(?:\.\d+)*/)?.[0] ?? "";
     return { ...s, render: { type: "statement", kind, label, number, body } };

@@ -14,6 +14,16 @@ export interface ObzoSettings {
   mineruToken: string;
   /** Optional Anthropic API key for the Claude vision equation fallback. */
   anthropicApiKey: string;
+  /** Embedding backend for semantic block search. */
+  embedderBackend: "voyage" | "ollama";
+  /** Voyage API key for semantic block search (free tier works). */
+  voyageApiKey: string;
+  /** Voyage embedding model. */
+  embedModel: string;
+  /** Ollama server URL (local embeddings). */
+  ollamaUrl: string;
+  /** Ollama embedding model. */
+  ollamaModel: string;
   /** Master toggle for equation extraction (off = citations/terms/figures only). */
   enableEquations: boolean;
   /** Which extractor backend to use (pluggable; MinerU is the first). */
@@ -76,6 +86,11 @@ export const DEFAULT_SETTINGS: ObzoSettings = {
   pollIntervalMs: 2000,
   mineruToken: "",
   anthropicApiKey: "",
+  embedderBackend: "voyage",
+  voyageApiKey: "",
+  embedModel: "voyage-3.5-lite",
+  ollamaUrl: "http://localhost:11434",
+  ollamaModel: "nomic-embed-text",
   enableEquations: true,
   extractorBackend: "mineru",
   cacheMaxMB: 25,
@@ -465,6 +480,76 @@ export class ObzoSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.anthropicApiKey)
           .onChange(async (v) => {
             this.plugin.settings.anthropicApiKey = v.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    containerEl.createEl("h3", { text: "Semantic block import" });
+
+    new Setting(containerEl)
+      .setName("Embedding backend")
+      .setDesc(
+        "Powers 'Import block…'. Ollama = local, no key, no limits (run 'ollama serve'). Voyage = cloud free tier (sends text to Voyage)."
+      )
+      .addDropdown((d) =>
+        d
+          .addOption("voyage", "Voyage (cloud)")
+          .addOption("ollama", "Ollama (local, no key)")
+          .setValue(this.plugin.settings.embedderBackend)
+          .onChange(async (v) => {
+            this.plugin.settings.embedderBackend =
+              v as ObzoSettings["embedderBackend"];
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Ollama server URL")
+      .setDesc("Local Ollama endpoint. Default http://localhost:11434.")
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.ollamaUrl)
+          .onChange(async (v) => {
+            this.plugin.settings.ollamaUrl = v.trim() || "http://localhost:11434";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Ollama model")
+      .setDesc("Embedding model to pull/use, e.g. nomic-embed-text or bge-small.")
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.ollamaModel)
+          .onChange(async (v) => {
+            this.plugin.settings.ollamaModel = v.trim() || "nomic-embed-text";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Voyage API key")
+      .setDesc(
+        "Used when backend = Voyage. Free tier from voyageai.com works. Block text is sent to Voyage to embed."
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder("pa-…")
+          .setValue(this.plugin.settings.voyageApiKey)
+          .onChange(async (v) => {
+            this.plugin.settings.voyageApiKey = v.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Embedding model")
+      .setDesc("Voyage model for block search. Default voyage-3.5-lite.")
+      .addText((t) =>
+        t
+          .setValue(this.plugin.settings.embedModel)
+          .onChange(async (v) => {
+            this.plugin.settings.embedModel = v.trim() || "voyage-3.5-lite";
             await this.plugin.saveSettings();
           })
       );

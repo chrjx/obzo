@@ -35,12 +35,36 @@ With a paper open in Zotero (or after running **"Obzo: Set current paper…"**):
 - Type **`@`** for citations — inserts a bidirectional `[[wikilink]]` if you
   have a literature note for that paper, otherwise a `zotero://` link (with an
   inline option to create & link a note).
-- Type **`;;`** for content from the current paper — terms, figure/section
+- Type **`;;`** for content from the current paper — figure/section
   references, and (with a MinerU token) equations, theorems, and figures. Insert
   formats are configurable, and each insert can carry a `zotero://` page backlink.
+- Run **"Import block…"** to pull a whole paragraph *with its equations* by
+  meaning — type a phrase or concept (e.g. "profit maximization") and Obzo
+  ranks the paper's blocks and inserts the one you pick (see below).
 
 Commands: *Set current paper*, *Clear pinned paper*, *Create literature note*,
-*Extract paper (MinerU)*, *Show status & capabilities*.
+*Extract paper (MinerU)*, *Import block…*, *Show status & capabilities*.
+
+## Semantic block import
+
+"Import block…" finds a meaningful **block** (a paragraph plus its equations,
+tagged with its section heading) by *meaning*, not just keywords — so "profit
+maximization" matches the paragraph about maximizing expected profit even if it
+never uses that phrase.
+
+- Blocks come from the same MinerU extraction as equations/figures (run
+  "Extract paper" once).
+- Ranking is **hybrid**: a section-heading/text keyword match, plus semantic
+  similarity via **[Voyage](https://voyageai.com) embeddings** (free tier works;
+  set the key in settings). Block vectors are computed once per paper and cached.
+- **Without a Voyage key** it still works, ranking by keyword only.
+
+Privacy: like MinerU, the Voyage backend sends block/query text to Voyage's
+servers to embed it.
+
+> **Future:** a local/offline embedding model (no key, no upload) is planned
+> behind the same pluggable interface — it'll be a settings switch, not a
+> rewrite. Voyage is the first backend.
 
 ## Optional companions
 

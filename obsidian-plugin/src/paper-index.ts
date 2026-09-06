@@ -196,31 +196,12 @@ export function buildIndexFromText(
   noiseWords: Set<string> = new Set()
 ): PaperIndex {
   const text = fulltext || "";
-  const tokens = tokenize(text);
-
-  const terms = topPhrases(tokens, 160);
-
-  // Fold acronyms in as high-value terms (with expansions as detail).
-  const acronyms = extractAcronyms(text);
-  const acrSuggestions: Suggestion[] = [];
-  for (const [acr, expansion] of acronyms) {
-    acrSuggestions.push({
-      kind: "term",
-      label: acr,
-      detail: expansion || undefined,
-      insert: acr,
-      score: 1000, // acronyms are usually the terms you want to type
-    });
-  }
-
-  const allTerms = dedupeByLabel([...acrSuggestions, ...terms]).filter(
-    (t) => !isMetadataNoise(t.label, noiseWords)
-  );
-
+  // Frequency-based "terms" were removed — too noisy next to real theorems,
+  // equations and figures. We only parse figure/section/equation references.
   return {
     attachmentKey,
     title,
-    terms: allTerms,
+    terms: [],
     refs: extractRefs(text),
     equations: [],
   };

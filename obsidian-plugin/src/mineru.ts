@@ -31,10 +31,20 @@ export interface ExtractedStatement {
   page: number | null;
 }
 
+export interface ExtractedBlock {
+  /** Nearest preceding section heading, if any. */
+  heading: string | null;
+  /** Paragraph text with its trailing display equations appended as $$…$$. */
+  text: string;
+  page: number | null;
+}
+
 export interface ExtractedContent {
   equations: ExtractedEquation[];
   figures: ExtractedFigure[];
   statements: ExtractedStatement[];
+  /** Prose blocks (paragraph + its equations) for semantic block import. */
+  blocks: ExtractedBlock[];
 }
 
 export type ProgressFn = (msg: string) => void;
@@ -175,8 +185,16 @@ export class MineruExtractor implements Extractor {
   }
 }
 
+// Case-insensitive so "THEOREM 1" (uppercase) is caught as well as "Theorem 1".
+// The single-letter enumerator (e.g. "Assumption A") is guarded so it can't
+// swallow a following word like "Corollary to …".
 const STATEMENT_RE =
-  /^(Theorem|Definition|Lemma|Proposition|Corollary|Assumption|Claim|Condition|Hypothesis|Remark|Example)\s*([0-9]+(?:\.[0-9]+)?|[A-Z])?\.?/;
+  /^(Theorem|Definition|Lemma|Proposition|Corollary|Assumption|Claim|Condition|Hypothesis|Remark|Example)\s*([0-9]+(?:\.[0-9]+)?|[A-Z](?![A-Za-z]))?\.?/i;
+
+/** Normalize a matched statement keyword to Title case (THEOREM -> Theorem). */
+function titleCaseKind(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
 
 /** Config the factory needs to build the selected extractor backend. */
 export interface ExtractorConfig {
@@ -206,7 +224,9 @@ function parseContentFromZip(zip: Uint8Array): ExtractedContent {
   const equations: ExtractedEquation[] = [];
   const figures: ExtractedFigure[] = [];
   const statements: ExtractedStatement[] = [];
+  const blocks: ExtractedBlock[] = [];
   const seenEq = new Set<string>();
+  let heading: string | null = null;
 
   const pushEq = (latex: string, page: number | null) => {
     const clean = cleanLatex(latex);
@@ -239,6 +259,13 @@ function parseContentFromZip(zip: Uint8Array): ExtractedContent {
       } else if (t === "text") {
         const stmt = readStatement(arr, i);
         if (stmt) statements.push(stmt);
+        // Track section headings; build a prose block for each paragraph.
+        if (b.text_level != null) {
+          heading = String(b.text ?? "").trim() || heading;
+        } else {
+          const blk = readBlock(arr, i, heading);
+          if (blk) blocks.push(blk);
+        }
       }
     }
   }
@@ -254,7 +281,33 @@ function parseContentFromZip(zip: Uint8Array): ExtractedContent {
     }
   }
 
-  return { equations, figures, statements };
+  return { equations, figures, statements, blocks };
+}
+
+/** A prose paragraph (skipping running heads/footnotes) plus its trailing
+ *  display equations, tagged with the nearest section heading. */
+function readBlock(
+  arr: any[],
+  i: number,
+  heading: string | null
+): ExtractedBlock | null {
+  const b = arr[i];
+  const para = String(b?.text ?? "").trim();
+  // Require a section heading (drops cover/masthead/boilerplate before §1) and
+  // skip page numbers / short running heads.
+  if (!heading || para.length < 40) return null;
+
+  let text = para;
+  let appended = 0;
+  for (let j = i + 1; j < arr.length && appended < 4; j++) {
+    if (!String(arr[j]?.type ?? "").includes("equation")) break;
+    const eq = cleanLatex(arr[j].latex ?? arr[j].text ?? "");
+    if (eq) {
+      text += `\n\n$$\n${eq}\n$$`;
+      appended++;
+    }
+  }
+  return { heading, text, page: numOrNull(b.page_idx) };
 }
 
 /** A labeled statement text block, plus its trailing display equations. */
@@ -274,7 +327,12 @@ function readStatement(arr: any[], i: number): ExtractedStatement | null {
       appended++;
     }
   }
-  return { kind: m[1], number: m[2] ?? null, text, page: numOrNull(b.page_idx) };
+  return {
+    kind: titleCaseKind(m[1]),
+    number: m[2] ?? null,
+    text,
+    page: numOrNull(b.page_idx),
+  };
 }
 
 /** Read a figure/table/chart block's cropped image bytes + caption. */
