@@ -55,16 +55,14 @@ never uses that phrase.
 - Blocks come from the same MinerU extraction as equations/figures (run
   "Extract paper" once).
 - Ranking is **hybrid**: a section-heading/text keyword match, plus semantic
-  similarity via **[Voyage](https://voyageai.com) embeddings** (free tier works;
-  set the key in settings). Block vectors are computed once per paper and cached.
-- **Without a Voyage key** it still works, ranking by keyword only.
-
-Privacy: like MinerU, the Voyage backend sends block/query text to Voyage's
-servers to embed it.
-
-> **Future:** a local/offline embedding model (no key, no upload) is planned
-> behind the same pluggable interface — it'll be a settings switch, not a
-> rewrite. Voyage is the first backend.
+  similarity from an **embedding backend**. Block vectors are computed once per
+  paper and cached.
+- Two embedding backends (settings → *Embedding backend*):
+  - **Ollama** — local, no key, no rate limits, offline. Run `ollama serve` and
+    `ollama pull nomic-embed-text`. *Recommended.*
+  - **[Voyage](https://voyageai.com)** — cloud, free tier; sends block/query
+    text to Voyage to embed.
+- **With neither configured** it still works, ranking by keyword only.
 
 ## Optional companions
 
@@ -98,6 +96,23 @@ git commit -am "0.2.0" && git tag 0.2.0 && git push --follow-tags
 Pushing the tag runs `.github/workflows/release.yml`, which builds the plugin
 and attaches `manifest.json`, `main.js`, and `styles.css` to a GitHub release
 named for the version — the format the Community Plugins store expects.
+
+## Network use & privacy
+
+Obzo is desktop-only and makes network requests in these cases — all optional
+except the first:
+
+- **Zotero (localhost)** — reads the paper you're reading, metadata, fulltext,
+  and annotations from Zotero's local API on `127.0.0.1:23119`. Local only.
+- **MinerU cloud** *(only if you run "Extract paper")* — your **PDF is uploaded
+  to MinerU's servers** to extract equations/theorems/figures. Requires your own
+  MinerU token. Don't extract PDFs you can't share with a third party.
+- **Voyage** *(only if you choose the Voyage embedding backend)* — block and
+  query **text is sent to Voyage** to compute embeddings. The **Ollama** backend
+  keeps this fully local instead.
+
+No telemetry or analytics. Nothing is sent anywhere unless you enable the
+feature that needs it.
 
 ## License
 
