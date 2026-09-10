@@ -4,7 +4,7 @@ import { App, TFile } from "obsidian";
  * Indexes vault notes by their Zotero identifiers (frontmatter `zotero-key` and
  * `citekey`), so citation completions can link to an existing literature note
  * (bidirectional wikilink) instead of only linking out to Zotero. ZotLit-made
- * notes, hand-made notes, and Obzo-made notes are all matched the same way.
+ * notes, hand-made notes, and Zob-made notes are all matched the same way.
  */
 export class NoteIndex {
   private byZoteroKey = new Map<string, TFile>();

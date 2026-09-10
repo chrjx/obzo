@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Obzo MCP server — exposes the Zotero paper you're reading to any MCP client
+ * Zob MCP server — exposes the Zotero paper you're reading to any MCP client
  * (Claude Code, Codex, Cursor, Claudian, …). Read-only tools:
  *   current_paper     — what's open in Zotero's reader
  *   list_annotations  — your highlights (text, comment, color, page, key)
- *   get_content       — equations / statements / figures from Obzo's cache
+ *   get_content       — equations / statements / figures from Zob's cache
  *   get_fulltext      — the PDF's extracted text (Zotero fulltext index)
  *
  * Config via env: OBZO_ZOTERO_PORT (default 23119), OBZO_ZOTERO_USER
@@ -20,7 +20,7 @@ import { join, dirname, resolve } from "node:path";
 const ZOTERO_PORT = process.env.OBZO_ZOTERO_PORT ?? "23119";
 const ZOTERO_USER = process.env.OBZO_ZOTERO_USER ?? "0";
 const VAULT = process.env.OBZO_VAULT ?? "";
-const INBOX = process.env.OBZO_INBOX ?? "Obzo Inbox.md";
+const INBOX = process.env.OBZO_INBOX ?? "Zob Inbox.md";
 const BASE = `http://127.0.0.1:${ZOTERO_PORT}`;
 const HEADERS = { "Zotero-Allowed-Request": "true" };
 
@@ -172,7 +172,7 @@ server.registerTool(
   "get_content",
   {
     description:
-      "Extracted content for the current paper (or attachmentKey) from Obzo's MinerU cache: equations (LaTeX), statements (theorems/definitions/assumptions), figures. Each item carries the ready-to-insert markdown and page. Filter by kind and/or a text query.",
+      "Extracted content for the current paper (or attachmentKey) from Zob's MinerU cache: equations (LaTeX), statements (theorems/definitions/assumptions), figures. Each item carries the ready-to-insert markdown and page. Filter by kind and/or a text query.",
     inputSchema: {
       attachmentKey: z.string().optional(),
       kind: z.enum(["equation", "statement", "figure", "all"]).optional(),
@@ -227,7 +227,7 @@ server.registerTool(
   "get_blocks",
   {
     description:
-      "Prose blocks (a paragraph plus its equations, tagged with the section heading) for the current paper, from Obzo's cache. Use this to import a whole block by meaning: read the blocks, pick the one matching the user's phrase/concept, and return its markdown. Optional query does a lexical prefilter; you do the semantic selection.",
+      "Prose blocks (a paragraph plus its equations, tagged with the section heading) for the current paper, from Zob's cache. Use this to import a whole block by meaning: read the blocks, pick the one matching the user's phrase/concept, and return its markdown. Optional query does a lexical prefilter; you do the semantic selection.",
     inputSchema: {
       attachmentKey: z.string().optional(),
       query: z.string().optional(),
@@ -300,7 +300,7 @@ server.registerTool(
   "insert_into_note",
   {
     description:
-      "Write Markdown into a vault note. mode 'append' (default) / 'prepend' add to an existing note (or the Obzo inbox if note_path is omitted); 'create' makes a new note. Returns the path written. The agent normally drafts text (e.g. from list_annotations) and calls this to save it.",
+      "Write Markdown into a vault note. mode 'append' (default) / 'prepend' add to an existing note (or the Zob inbox if note_path is omitted); 'create' makes a new note. Returns the path written. The agent normally drafts text (e.g. from list_annotations) and calls this to save it.",
     inputSchema: {
       markdown: z.string(),
       note_path: z.string().optional(),

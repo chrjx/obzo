@@ -1,7 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import type ObzoPlugin from "./main";
+import type ZobPlugin from "./main";
 
-export interface ObzoSettings {
+export interface ZobSettings {
   /** Port of Zotero's local HTTP server (default 23119). */
   zoteroPort: number;
   /** Zotero data directory (for reconstructing PDF paths without the bridge). */
@@ -52,7 +52,7 @@ export interface ObzoSettings {
   citekeyProperty: string;
   /** Frontmatter property holding a note's Zotero item key. */
   zoteroKeyProperty: string;
-  /** Folder for Obzo-created literature notes. */
+  /** Folder for Zob-created literature notes. */
   literatureFolder: string;
   /** Filename template for created literature notes (placeholders below). */
   noteFilenameTemplate: string;
@@ -79,7 +79,7 @@ export const FIGURE_TEMPLATES: Record<string, string> = {
   "image-caption": "![{caption}]({path})",
 };
 
-export const DEFAULT_SETTINGS: ObzoSettings = {
+export const DEFAULT_SETTINGS: ZobSettings = {
   zoteroPort: 23119,
   zoteroDataDir: `${process.env.HOME ?? ""}/Zotero`,
   autoTrackRecent: true,
@@ -123,8 +123,8 @@ export const DEFAULT_SETTINGS: ObzoSettings = {
   ].join("\n"),
 };
 
-export class ObzoSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: ObzoPlugin) {
+export class ZobSettingTab extends PluginSettingTab {
+  constructor(app: App, private plugin: ZobPlugin) {
     super(app, plugin);
   }
 
@@ -132,7 +132,7 @@ export class ObzoSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Obzo" });
+    containerEl.createEl("h2", { text: "Zob" });
 
     const status = containerEl.createEl("p", {
       cls: "obzo-settings-status",
@@ -149,7 +149,7 @@ export class ObzoSettingTab extends PluginSettingTab {
       status.setText(
         [
           line(zotero, "Base (Zotero)", "start Zotero"),
-          line(bridge, "Live (Obzo Bridge)", "install the bridge xpi"),
+          line(bridge, "Live (Zob Bridge)", "install the bridge xpi"),
           line(extractor, "Content (extractor)", "set a MinerU token below"),
         ].join("\n")
       );
@@ -176,7 +176,7 @@ export class ObzoSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Zotero data directory")
       .setDesc(
-        "Used to locate PDF files when the Obzo Bridge isn't installed. Default ~/Zotero."
+        "Used to locate PDF files when the Zob Bridge isn't installed. Default ~/Zotero."
       )
       .addText((t) =>
         t
@@ -191,7 +191,7 @@ export class ObzoSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Auto-track recent paper (no bridge)")
       .setDesc(
-        "Without the Obzo Bridge, follow the most recently modified paper in Zotero. Turn off to only use the manually set paper."
+        "Without the Zob Bridge, follow the most recently modified paper in Zotero. Turn off to only use the manually set paper."
       )
       .addToggle((t) =>
         t.setValue(this.plugin.settings.autoTrackRecent).onChange(async (v) => {
@@ -277,7 +277,7 @@ export class ObzoSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Literature-note folder")
-      .setDesc("Folder for notes created by Obzo (matches ZotLit's if you use it).")
+      .setDesc("Folder for notes created by Zob (matches ZotLit's if you use it).")
       .addText((t) =>
         t
           .setValue(this.plugin.settings.literatureFolder)
@@ -352,7 +352,7 @@ export class ObzoSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.statementFormat)
           .onChange(async (v) => {
             this.plugin.settings.statementFormat =
-              v as ObzoSettings["statementFormat"];
+              v as ZobSettings["statementFormat"];
             await this.plugin.saveSettings();
           })
       );
@@ -381,7 +381,7 @@ export class ObzoSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.equationFormat)
           .onChange(async (v) => {
             this.plugin.settings.equationFormat =
-              v as ObzoSettings["equationFormat"];
+              v as ZobSettings["equationFormat"];
             await this.plugin.saveSettings();
           })
       );
@@ -409,7 +409,7 @@ export class ObzoSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.figureFormat)
           .onChange(async (v) => {
             this.plugin.settings.figureFormat =
-              v as ObzoSettings["figureFormat"];
+              v as ZobSettings["figureFormat"];
             await this.plugin.saveSettings();
           })
       );
@@ -498,7 +498,7 @@ export class ObzoSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.embedderBackend)
           .onChange(async (v) => {
             this.plugin.settings.embedderBackend =
-              v as ObzoSettings["embedderBackend"];
+              v as ZobSettings["embedderBackend"];
             await this.plugin.saveSettings();
           })
       );

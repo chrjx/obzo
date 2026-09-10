@@ -57,7 +57,7 @@ export type WaitResult =
   | { ok: false; unsupported: boolean };
 
 /**
- * Talks to the local Zotero process: the Obzo Bridge endpoints (/obzo/*)
+ * Talks to the local Zotero process: the Zob Bridge endpoints (/obzo/*)
  * and Zotero's built-in local API (/api/*). The local API accepts the "0"
  * user alias, so no userID configuration is required.
  */
@@ -85,7 +85,7 @@ export class ZoteroBridge {
     }
   }
 
-  /** Is the Obzo Bridge companion plugin installed and responding? */
+  /** Is the Zob Bridge companion plugin installed and responding? */
   async ping(): Promise<boolean> {
     const res = await this.get("/obzo/ping");
     return !!res && res.status === 200 && res.json?.ok === true;

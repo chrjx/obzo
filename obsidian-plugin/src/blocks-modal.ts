@@ -38,7 +38,7 @@ export class BlockImportModal extends SuggestModal<BlockHit> {
       this.last = results;
       return results;
     } catch (e) {
-      console.error("[Obzo] block search failed", e);
+      console.error("[Zob] block search failed", e);
       return this.last;
     }
   }

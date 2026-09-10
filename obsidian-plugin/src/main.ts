@@ -1,8 +1,8 @@
 import { Notice, Plugin, Editor, EditorPosition } from "obsidian";
 import {
-  ObzoSettings,
+  ZobSettings,
   DEFAULT_SETTINGS,
-  ObzoSettingTab,
+  ZobSettingTab,
   STATEMENT_TEMPLATES,
   EQUATION_TEMPLATES,
   FIGURE_TEMPLATES,
@@ -23,7 +23,7 @@ import {
   metadataNoiseWords,
   normalizeMath,
 } from "./paper-index";
-import { ObzoSuggest } from "./suggest";
+import { ZobSuggest } from "./suggest";
 import { PaperPickerModal } from "./picker";
 import { NoteIndex } from "./notes";
 import { TFile, normalizePath } from "obsidian";
@@ -57,7 +57,7 @@ export interface BlockEntry {
 export interface Capabilities {
   /** Tier 0: Zotero's local API is reachable. */
   zotero: boolean;
-  /** Tier 1: the Obzo Bridge is installed (live tab tracking, page, selection). */
+  /** Tier 1: the Zob Bridge is installed (live tab tracking, page, selection). */
   bridge: boolean;
   /** Tier 2: an extractor is configured (MinerU token) for equations/theorems/figures. */
   extractor: boolean;
@@ -67,20 +67,20 @@ export interface Capabilities {
 function sourcePrefix(r: CurrentReading): string {
   switch (r.source) {
     case "reader":
-      return "Obzo ▸ ";
+      return "Zob ▸ ";
     case "manual":
-      return "Obzo 📌 ▸ ";
+      return "Zob 📌 ▸ ";
     case "recent":
-      return "Obzo (recent) ▸ ";
+      return "Zob (recent) ▸ ";
     case "selection":
-      return "Obzo (selected) ▸ ";
+      return "Zob (selected) ▸ ";
     default:
-      return "Obzo ▸ ";
+      return "Zob ▸ ";
   }
 }
 
-export default class ObzoPlugin extends Plugin {
-  settings!: ObzoSettings;
+export default class ZobPlugin extends Plugin {
+  settings!: ZobSettings;
   bridge!: ZoteroBridge;
 
   /** The paper currently open in Zotero's reader (or null). */
@@ -130,11 +130,11 @@ export default class ObzoPlugin extends Plugin {
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("obzo-status");
-    this.setStatus("Obzo: connecting…");
+    this.setStatus("Zob: connecting…");
     this.statusEl.onClickEvent(() => this.tick(true));
 
-    this.addSettingTab(new ObzoSettingTab(this.app, this));
-    this.registerEditorSuggest(new ObzoSuggest(this));
+    this.addSettingTab(new ZobSettingTab(this.app, this));
+    this.registerEditorSuggest(new ZobSuggest(this));
 
     // Index vault notes by Zotero id; keep it fresh as notes change.
     this.noteIndex = new NoteIndex(this.app, () => ({
@@ -162,7 +162,7 @@ export default class ObzoPlugin extends Plugin {
       name: "Show current paper",
       callback: () => {
         const label = this.current?.item ? itemLabel(this.current) : null;
-        new Notice(label ? `Obzo: ${label}` : "Obzo: no paper open in Zotero.");
+        new Notice(label ? `Zob: ${label}` : "Zob: no paper open in Zotero.");
       },
     });
 
@@ -184,7 +184,7 @@ export default class ObzoPlugin extends Plugin {
       editorCallback: (editor) => {
         if (!this.hasBlocks()) {
           new Notice(
-            'Obzo: no blocks for this paper yet — run "Extract paper" first.'
+            'Zob: no blocks for this paper yet — run "Extract paper" first.'
           );
           return;
         }
@@ -202,7 +202,7 @@ export default class ObzoPlugin extends Plugin {
       name: "Clear pinned paper (resume auto-tracking)",
       callback: () => {
         this.pinnedReading = null;
-        new Notice("Obzo: pinned paper cleared.");
+        new Notice("Zob: pinned paper cleared.");
         this.refreshCurrent();
       },
     });
@@ -220,7 +220,7 @@ export default class ObzoPlugin extends Plugin {
         void (async () => {
           const item = this.current?.item;
           if (!item) {
-            new Notice("Obzo: no current paper.");
+            new Notice("Zob: no current paper.");
             return;
           }
           const file = await this.createLiteratureNote(item);
@@ -328,15 +328,15 @@ export default class ObzoPlugin extends Plugin {
     try {
       const file = await this.createLiteratureNoteByKey(itemKey);
       if (!file) {
-        new Notice("Obzo: couldn't load that item from Zotero.");
+        new Notice("Zob: couldn't load that item from Zotero.");
         return;
       }
       const key = citekey || file.basename.replace(/^@/, "");
       editor.replaceRange(wikilink(file, key), start, end);
-      new Notice(`Obzo: created ${file.basename}`);
+      new Notice(`Zob: created ${file.basename}`);
     } catch (e: any) {
-      new Notice(`Obzo: couldn't create note — ${e?.message ?? e}`);
-      console.error("[Obzo] create note failed", e);
+      new Notice(`Zob: couldn't create note — ${e?.message ?? e}`);
+      console.error("[Zob] create note failed", e);
     }
   }
 
@@ -352,7 +352,7 @@ export default class ObzoPlugin extends Plugin {
             this.settings.zoteroDataDir
           );
           if (!reading) {
-            new Notice("Obzo: couldn't load that item from Zotero.");
+            new Notice("Zob: couldn't load that item from Zotero.");
             return;
           }
           this.pinnedReading = reading;
@@ -419,9 +419,9 @@ export default class ObzoPlugin extends Plugin {
     const alive = await this.bridge.zoteroAlive();
     this.caps.zotero = alive;
     if (!alive) {
-      this.setStatus("Obzo: Zotero not reachable");
+      this.setStatus("Zob: Zotero not reachable");
       if (verbose) {
-        new Notice("Obzo: can't reach Zotero. Is Zotero running?");
+        new Notice("Zob: can't reach Zotero. Is Zotero running?");
       }
       return;
     }
@@ -432,7 +432,7 @@ export default class ObzoPlugin extends Plugin {
       this.applyReading(reading, verbose);
     } else {
       this.current = null;
-      this.setStatus('Obzo: run "Set current paper" to pick a paper');
+      this.setStatus('Zob: run "Set current paper" to pick a paper');
     }
   }
 
@@ -447,11 +447,11 @@ export default class ObzoPlugin extends Plugin {
     if (reading?.item) {
       this.setStatus(sourcePrefix(reading) + itemLabel(reading));
     } else {
-      this.setStatus("Obzo: no paper open");
+      this.setStatus("Zob: no paper open");
     }
 
     if (changed && verbose && reading?.item) {
-      new Notice(`Obzo now tracking: ${itemLabel(reading)}`);
+      new Notice(`Zob now tracking: ${itemLabel(reading)}`);
     }
 
     // Rebuild whenever the index doesn't match the open paper. Self-healing:
@@ -509,9 +509,9 @@ export default class ObzoPlugin extends Plugin {
       this.indexedKey = att.key;
 
       const n = index.terms.length + index.refs.length + index.equations.length;
-      this.setStatus(`Obzo ▸ ${itemLabel(reading)}  (${n} suggestions)`);
+      this.setStatus(`Zob ▸ ${itemLabel(reading)}  (${n} suggestions)`);
     } catch (e) {
-      console.error("[Obzo] indexing failed", e);
+      console.error("[Zob] indexing failed", e);
       // Leave indexedKey unchanged so the next poll retries this paper.
     }
   }
@@ -762,7 +762,7 @@ export default class ObzoPlugin extends Plugin {
   async extractPaper(): Promise<void> {
     const att = this.current?.attachment;
     if (!att?.path || att.contentType !== "application/pdf") {
-      new Notice("Obzo: no PDF open in Zotero to extract from.");
+      new Notice("Zob: no PDF open in Zotero to extract from.");
       return;
     }
     const extractor = createExtractor({
@@ -770,19 +770,19 @@ export default class ObzoPlugin extends Plugin {
       mineruToken: this.settings.mineruToken,
     });
     if (!extractor) {
-      new Notice("Obzo: no extractor configured. Set a MinerU token in settings.");
+      new Notice("Zob: no extractor configured. Set a MinerU token in settings.");
       return;
     }
     if (this.extracting) {
-      new Notice("Obzo: an extraction is already running.");
+      new Notice("Zob: an extraction is already running.");
       return;
     }
 
     this.extracting = true;
-    const notice = new Notice(`Obzo: extracting paper (${extractor.name})…`, 0);
+    const notice = new Notice(`Zob: extracting paper (${extractor.name})…`, 0);
     try {
       const content = await extractor.extract(att.path, (m) =>
-        notice.setMessage(`Obzo: ${m}`)
+        notice.setMessage(`Zob: ${m}`)
       );
 
       const equations = content.equations.map((e, i) => equationSuggestion(e, i));
@@ -808,13 +808,13 @@ export default class ObzoPlugin extends Plugin {
       await this.saveEqCache();
 
       notice.setMessage(
-        `Obzo: ${equations.length} equations, ${statements.length} statements, ${figures.length} figures, ${content.blocks.length} blocks ready.`
+        `Zob: ${equations.length} equations, ${statements.length} statements, ${figures.length} figures, ${content.blocks.length} blocks ready.`
       );
       window.setTimeout(() => notice.hide(), 6000);
     } catch (e: any) {
       notice.hide();
-      new Notice(`Obzo: extraction failed — ${e?.message ?? e}`, 8000);
-      console.error("[Obzo] MinerU extraction failed", e);
+      new Notice(`Zob: extraction failed — ${e?.message ?? e}`, 8000);
+      console.error("[Zob] MinerU extraction failed", e);
     } finally {
       this.extracting = false;
     }
@@ -832,7 +832,7 @@ export default class ObzoPlugin extends Plugin {
       if (!(await adapter.exists("obzo-figures"))) await adapter.mkdir("obzo-figures");
       if (!(await adapter.exists(dir))) await adapter.mkdir(dir);
     } catch (e) {
-      console.error("[Obzo] could not create figure folder", e);
+      console.error("[Zob] could not create figure folder", e);
     }
 
     const out: Suggestion[] = [];
@@ -843,7 +843,7 @@ export default class ObzoPlugin extends Plugin {
         await adapter.writeBinary(path, toArrayBuffer(fig.data));
         out.push(figureSuggestion(path, fig, i));
       } catch (e) {
-        console.error("[Obzo] failed to save figure", path, e);
+        console.error("[Zob] failed to save figure", path, e);
       }
     }
     return out;
@@ -904,7 +904,7 @@ export default class ObzoPlugin extends Plugin {
         JSON.stringify(obj)
       );
     } catch (e) {
-      console.error("[Obzo] failed to persist equation cache", e);
+      console.error("[Zob] failed to persist equation cache", e);
     }
   }
 
@@ -942,7 +942,7 @@ export default class ObzoPlugin extends Plugin {
     }
     if (evicted > 0) {
       console.log(
-        `[Obzo] evicted ${evicted} paper(s) to keep the equation cache under ${this.settings.cacheMaxMB} MB`
+        `[Zob] evicted ${evicted} paper(s) to keep the equation cache under ${this.settings.cacheMaxMB} MB`
       );
     }
     return evicted > 0;
@@ -978,7 +978,7 @@ export default class ObzoPlugin extends Plugin {
         (this.caps.zotero ? "" : "  → start Zotero")
     );
     lines.push(
-      `${this.caps.bridge ? "✓" : "○"} Live — Obzo Bridge` +
+      `${this.caps.bridge ? "✓" : "○"} Live — Zob Bridge` +
         (this.caps.bridge ? "" : "  → install the bridge xpi for live tab/page/selection")
     );
     lines.push(
@@ -1248,7 +1248,7 @@ function renderFields(r: SuggestionRender, page?: number): Record<string, string
   };
 }
 
-function templateFor(r: SuggestionRender, s: ObzoSettings): string {
+function templateFor(r: SuggestionRender, s: ZobSettings): string {
   if (r.type === "statement") {
     return s.statementFormat === "custom"
       ? s.statementTemplate
@@ -1267,7 +1267,7 @@ function templateFor(r: SuggestionRender, s: ObzoSettings): string {
 /** Render a suggestion's insert text from the chosen (preset or custom) template. */
 function renderInsert(
   r: SuggestionRender,
-  s: ObzoSettings,
+  s: ZobSettings,
   page?: number
 ): string {
   const out = renderTemplate(templateFor(r, s), renderFields(r, page));

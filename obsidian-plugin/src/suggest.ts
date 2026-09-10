@@ -6,7 +6,7 @@ import {
   EditorSuggestTriggerInfo,
   TFile,
 } from "obsidian";
-import type ObzoPlugin from "./main";
+import type ZobPlugin from "./main";
 import { Suggestion } from "./paper-index";
 
 function escapeRe(s: string): string {
@@ -19,8 +19,8 @@ function escapeRe(s: string): string {
  *   - the paper trigger    (default ";;") -> terms / figures / equations
  *                                             from the paper open in Zotero
  */
-export class ObzoSuggest extends EditorSuggest<Suggestion> {
-  constructor(private plugin: ObzoPlugin) {
+export class ZobSuggest extends EditorSuggest<Suggestion> {
+  constructor(private plugin: ZobPlugin) {
     super(plugin.app);
   }
 
