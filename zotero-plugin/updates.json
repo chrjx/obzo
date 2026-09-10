@@ -4,7 +4,7 @@
       "updates": [
         {
           "version": "0.3.0",
-          "update_link": "https://github.com/chrjx/obzo/releases/download/v0.3.0/obzo-bridge.xpi",
+          "update_link": "https://github.com/chrjx/zob/releases/download/v0.3.0/obzo-bridge.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "7.999",

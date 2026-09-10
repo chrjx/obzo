@@ -4,11 +4,11 @@
   "version": "0.3.0",
   "description": "Exposes the currently open Zotero reader item to the Obzo Obsidian plugin over Zotero's local HTTP server.",
   "author": "obzo",
-  "homepage_url": "https://github.com/chrjx/obzo",
+  "homepage_url": "https://github.com/chrjx/zob",
   "applications": {
     "zotero": {
       "id": "obzo-bridge@obzo.local",
-      "update_url": "https://raw.githubusercontent.com/chrjx/obzo/main/updates.json",
+      "update_url": "https://raw.githubusercontent.com/chrjx/zob/main/updates.json",
       "strict_min_version": "7.999",
       "strict_max_version": "10.99.99"
     }
