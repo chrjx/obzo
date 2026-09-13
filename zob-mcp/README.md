@@ -27,42 +27,42 @@ reasoning; **no API key is needed here.** Zob is just the context provider.
 
 ## Requirements
 
-- **Zotero running** with the **Zob Bridge** plugin (provides `/obzo/current`).
+- **Zotero running** with the **Zob Bridge** plugin (provides `/zob/current`).
 - **Node 18+** (uses global `fetch`).
 - For `get_content`: the **Obsidian vault path** (to read the plugin's cache),
-  passed as `OBZO_VAULT`.
+  passed as `ZOB_VAULT`.
 
 ## Build
 
 ```bash
-cd obzo-mcp && npm install && npm run build   # -> dist/index.js
+cd zob-mcp && npm install && npm run build   # -> dist/index.js
 ```
 
 ## Configure your client
 
 ### Claude Code
 ```bash
-claude mcp add obzo \
-  -e OBZO_VAULT=/Users/chrix/Documents/Obsidian \
-  -- node /Users/chrix/Projects/obzo-complete/obzo-mcp/dist/index.js
+claude mcp add zob \
+  -e ZOB_VAULT=/Users/chrix/Documents/Obsidian \
+  -- node /Users/chrix/Projects/zob-complete/zob-mcp/dist/index.js
 ```
 
 ### Claude Desktop / Claudian / Codex (JSON config)
 ```json
 {
   "mcpServers": {
-    "obzo": {
+    "zob": {
       "command": "node",
-      "args": ["/Users/chrix/Projects/obzo-complete/obzo-mcp/dist/index.js"],
-      "env": { "OBZO_VAULT": "/Users/chrix/Documents/Obsidian" }
+      "args": ["/Users/chrix/Projects/zob-complete/zob-mcp/dist/index.js"],
+      "env": { "ZOB_VAULT": "/Users/chrix/Documents/Obsidian" }
     }
   }
 }
 ```
 
-Environment variables: `OBZO_VAULT` (for `get_content`, `get_blocks`, and
-`insert_into_note`), `OBZO_INBOX` (default note for writes, default
-`Zob Inbox.md`), `OBZO_ZOTERO_PORT` (default `23119`), `OBZO_ZOTERO_USER`
+Environment variables: `ZOB_VAULT` (for `get_content`, `get_blocks`, and
+`insert_into_note`), `ZOB_INBOX` (default note for writes, default
+`Zob Inbox.md`), `ZOB_ZOTERO_PORT` (default `23119`), `ZOB_ZOTERO_USER`
 (default `0` — the local-API alias).
 
 ## Running on a local agent (your subscription, no API key)
@@ -71,7 +71,7 @@ Both major coding agents run **locally on your existing subscription** and can
 drive this server — no Anthropic/OpenAI API key required:
 
 - **Claude Code** authenticates with your **Claude Pro/Max** login. Add the
-  server with `claude mcp add obzo …` (above); drive it interactively, or
+  server with `claude mcp add zob …` (above); drive it interactively, or
   headless with `claude -p "…"` for scripting. Claude Code can also *be* an MCP
   server (`claude mcp serve`).
 - **Codex** runs on your **ChatGPT** plan via its local app/CLI; point its MCP

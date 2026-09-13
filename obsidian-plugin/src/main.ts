@@ -103,7 +103,7 @@ export default class ZobPlugin extends Plugin {
   private extracting = false;
   /** Whether the push (long-poll) loop is active. */
   private eventLoopRunning = false;
-  /** False once we learn the installed bridge has no /obzo/wait endpoint. */
+  /** False once we learn the installed bridge has no /zob/wait endpoint. */
   private pushSupported = true;
   /** Attachment key currentIndex was built for; drives self-healing rebuilds. */
   private indexedKey: string | null = null;
@@ -129,7 +129,7 @@ export default class ZobPlugin extends Plugin {
     this.bridge = new ZoteroBridge(this.settings.zoteroPort);
 
     this.statusEl = this.addStatusBarItem();
-    this.statusEl.addClass("obzo-status");
+    this.statusEl.addClass("zob-status");
     this.setStatus("Zob: connecting…");
     this.statusEl.onClickEvent(() => this.tick(true));
 
@@ -152,13 +152,13 @@ export default class ZobPlugin extends Plugin {
     );
 
     this.addCommand({
-      id: "obzo-refresh-current",
+      id: "zob-refresh-current",
       name: "Refresh current paper from Zotero",
       callback: () => this.tick(true),
     });
 
     this.addCommand({
-      id: "obzo-show-current",
+      id: "zob-show-current",
       name: "Show current paper",
       callback: () => {
         const label = this.current?.item ? itemLabel(this.current) : null;
@@ -167,19 +167,19 @@ export default class ZobPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "obzo-extract-equations",
+      id: "zob-extract-equations",
       name: "Extract paper: equations, theorems, figures (MinerU)",
       callback: () => void this.extractPaper(),
     });
 
     this.addCommand({
-      id: "obzo-set-current-paper",
+      id: "zob-set-current-paper",
       name: "Set current paper…",
       callback: () => this.openPaperPicker(),
     });
 
     this.addCommand({
-      id: "obzo-import-block",
+      id: "zob-import-block",
       name: "Import block from current paper…",
       editorCallback: (editor) => {
         if (!this.hasBlocks()) {
@@ -198,7 +198,7 @@ export default class ZobPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "obzo-clear-pinned-paper",
+      id: "zob-clear-pinned-paper",
       name: "Clear pinned paper (resume auto-tracking)",
       callback: () => {
         this.pinnedReading = null;
@@ -208,13 +208,13 @@ export default class ZobPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "obzo-status",
+      id: "zob-status",
       name: "Show status & capabilities",
       callback: () => this.showStatus(),
     });
 
     this.addCommand({
-      id: "obzo-create-literature-note",
+      id: "zob-create-literature-note",
       name: "Create (or open) literature note for current paper",
       callback: () => {
         void (async () => {
@@ -238,7 +238,7 @@ export default class ZobPlugin extends Plugin {
 
   // ---- update loop (tiered) ---------------------------------------------
   //
-  // Tier 1 (bridge present): runEventLoop() blocks on /obzo/wait and applies
+  // Tier 1 (bridge present): runEventLoop() blocks on /zob/wait and applies
   //   the active reader tab the instant it changes (live push).
   // Tier 0 (no bridge): the heartbeat tick() resolves the current paper from
   //   a manually-pinned item, else the most recently modified paper via the
@@ -827,9 +827,9 @@ export default class ZobPlugin extends Plugin {
   ): Promise<Suggestion[]> {
     if (figures.length === 0) return [];
     const adapter = this.app.vault.adapter;
-    const dir = `obzo-figures/${attachmentKey}`;
+    const dir = `zob-figures/${attachmentKey}`;
     try {
-      if (!(await adapter.exists("obzo-figures"))) await adapter.mkdir("obzo-figures");
+      if (!(await adapter.exists("zob-figures"))) await adapter.mkdir("zob-figures");
       if (!(await adapter.exists(dir))) await adapter.mkdir(dir);
     } catch (e) {
       console.error("[Zob] could not create figure folder", e);
@@ -859,7 +859,7 @@ export default class ZobPlugin extends Plugin {
   }
 
   private cachePath(): string {
-    return `${this.app.vault.configDir}/plugins/obzo/equation-cache.json`;
+    return `${this.app.vault.configDir}/plugins/zob/equation-cache.json`;
   }
 
   private async loadEqCache(): Promise<void> {

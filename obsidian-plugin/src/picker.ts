@@ -22,9 +22,9 @@ export class PaperPickerModal extends SuggestModal<ZoteroSearchHit> {
   }
 
   renderSuggestion(hit: ZoteroSearchHit, el: HTMLElement) {
-    el.createDiv({ text: hit.title || "(untitled)", cls: "obzo-suggestion-title" });
+    el.createDiv({ text: hit.title || "(untitled)", cls: "zob-suggestion-title" });
     const meta = creatorSummary(hit);
-    if (meta) el.createDiv({ text: meta, cls: "obzo-suggestion-meta" });
+    if (meta) el.createDiv({ text: meta, cls: "zob-suggestion-meta" });
   }
 
   onChooseSuggestion(hit: ZoteroSearchHit) {

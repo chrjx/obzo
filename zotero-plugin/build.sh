@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Package the Obzo Bridge Zotero plugin into an installable .xpi
+# Package the Zob Bridge Zotero plugin into an installable .xpi
 # (an .xpi is just a zip of manifest.json + bootstrap.js at the archive root).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST="$HERE/../dist"
-XPI="$DIST/obzo-bridge.xpi"
+XPI="$DIST/zob-bridge.xpi"
 
 mkdir -p "$DIST"
 rm -f "$XPI"

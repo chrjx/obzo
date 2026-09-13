@@ -25,7 +25,7 @@ Install the **BRAT** plugin, then *Add beta plugin* with this repository URL.
 ### Manually
 Download `manifest.json`, `main.js`, and `styles.css` from the
 [latest release](../../releases/latest) into
-`<vault>/.obsidian/plugins/obzo/`, then enable it in
+`<vault>/.obsidian/plugins/zob/`, then enable it in
 **Settings → Community plugins**.
 
 ## Usage
@@ -71,7 +71,7 @@ These live in this repo and enable the higher tiers:
 | Path | What it enables |
 | --- | --- |
 | `zotero-plugin/` | **Zob Bridge** — a Zotero plugin adding live tab tracking, current page, and selected annotations. Build with `bash zotero-plugin/build.sh` → install the resulting `.xpi` in Zotero. |
-| `obzo-mcp/` | **MCP server** — exposes the current paper, annotations, and extracted content to any MCP client, plus tools/prompts to write notes on your subscription. See `obzo-mcp/README.md`. |
+| `zob-mcp/` | **MCP server** — exposes the current paper, annotations, and extracted content to any MCP client, plus tools/prompts to write notes on your subscription. See `zob-mcp/README.md`. |
 
 Without them, Zob falls back to Zotero's local API (recent paper / manual
 picker) and works fine — run **"Zob: Show status & capabilities"** to see which

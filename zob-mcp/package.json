@@ -1,10 +1,10 @@
 {
-  "name": "obzo-mcp",
+  "name": "zob-mcp",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "MCP server exposing the Zotero paper you're reading (current paper, annotations, MinerU content, fulltext) to any MCP client.",
-  "bin": { "obzo-mcp": "dist/index.js" },
+  "bin": { "zob-mcp": "dist/index.js" },
   "scripts": {
     "build": "tsc"
   },

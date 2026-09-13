@@ -29,7 +29,7 @@ export interface ZoteroAttachment {
   path: string | null;
 }
 
-/** Response shape of GET /obzo/current from the Zotero companion plugin. */
+/** Response shape of GET /zob/current from the Zotero companion plugin. */
 export interface CurrentReading {
   open: boolean;
   source?: string;
@@ -57,7 +57,7 @@ export type WaitResult =
   | { ok: false; unsupported: boolean };
 
 /**
- * Talks to the local Zotero process: the Zob Bridge endpoints (/obzo/*)
+ * Talks to the local Zotero process: the Zob Bridge endpoints (/zob/*)
  * and Zotero's built-in local API (/api/*). The local API accepts the "0"
  * user alias, so no userID configuration is required.
  */
@@ -87,13 +87,13 @@ export class ZoteroBridge {
 
   /** Is the Zob Bridge companion plugin installed and responding? */
   async ping(): Promise<boolean> {
-    const res = await this.get("/obzo/ping");
+    const res = await this.get("/zob/ping");
     return !!res && res.status === 200 && res.json?.ok === true;
   }
 
   /** What is open in the active Zotero reader tab right now? */
   async current(): Promise<CurrentReading | null> {
-    const res = await this.get("/obzo/current");
+    const res = await this.get("/zob/current");
     if (!res || res.status !== 200) return null;
     return res.json as CurrentReading;
   }
@@ -101,11 +101,11 @@ export class ZoteroBridge {
   /**
    * Long-poll: resolves when Zotero's active tab changes (pushed by the
    * bridge), or after the bridge's ~25s heartbeat. `unsupported` is true when
-   * the installed bridge predates /obzo/wait, so the client can fall back to
+   * the installed bridge predates /zob/wait, so the client can fall back to
    * timer polling.
    */
   async waitForChange(): Promise<WaitResult> {
-    const res = await this.get("/obzo/wait");
+    const res = await this.get("/zob/wait");
     if (!res) return { ok: false, unsupported: false };
     if (res.status === 404) return { ok: false, unsupported: true };
     if (res.status !== 200) return { ok: false, unsupported: false };

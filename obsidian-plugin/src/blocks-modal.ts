@@ -44,14 +44,14 @@ export class BlockImportModal extends SuggestModal<BlockHit> {
   }
 
   renderSuggestion(hit: BlockHit, el: HTMLElement) {
-    el.addClass("obzo-suggestion");
+    el.addClass("zob-suggestion");
     const head = [hit.heading, hit.page !== null ? `p.${hit.page + 1}` : null]
       .filter(Boolean)
       .join("  ·  ");
-    if (head) el.createDiv({ cls: "obzo-suggestion-kind", text: head });
+    if (head) el.createDiv({ cls: "zob-suggestion-kind", text: head });
     const preview = hit.text.replace(/\$\$[\s\S]*?\$\$/g, " [eq] ").replace(/\s+/g, " ").trim();
     el.createDiv({
-      cls: "obzo-suggestion-title",
+      cls: "zob-suggestion-title",
       text: preview.length > 160 ? preview.slice(0, 159) + "…" : preview,
     });
   }

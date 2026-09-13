@@ -10,7 +10,7 @@ node_modules/
 
 # build outputs
 dist/
-obzo-mcp/dist/
+zob-mcp/dist/
 obsidian-plugin/main.js
 *.js.map
 

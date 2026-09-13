@@ -7,8 +7,8 @@
  *   get_content       — equations / statements / figures from Zob's cache
  *   get_fulltext      — the PDF's extracted text (Zotero fulltext index)
  *
- * Config via env: OBZO_ZOTERO_PORT (default 23119), OBZO_ZOTERO_USER
- * (default "0" — the local-API alias), OBZO_VAULT (path to the Obsidian vault,
+ * Config via env: ZOB_ZOTERO_PORT (default 23119), ZOB_ZOTERO_USER
+ * (default "0" — the local-API alias), ZOB_VAULT (path to the Obsidian vault,
  * needed by get_content to read the plugin's cache).
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -17,10 +17,10 @@ import { z } from "zod";
 import { readFile, writeFile, appendFile, mkdir, stat } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 
-const ZOTERO_PORT = process.env.OBZO_ZOTERO_PORT ?? "23119";
-const ZOTERO_USER = process.env.OBZO_ZOTERO_USER ?? "0";
-const VAULT = process.env.OBZO_VAULT ?? "";
-const INBOX = process.env.OBZO_INBOX ?? "Zob Inbox.md";
+const ZOTERO_PORT = process.env.ZOB_ZOTERO_PORT ?? "23119";
+const ZOTERO_USER = process.env.ZOB_ZOTERO_USER ?? "0";
+const VAULT = process.env.ZOB_VAULT ?? "";
+const INBOX = process.env.ZOB_INBOX ?? "Zob Inbox.md";
 const BASE = `http://127.0.0.1:${ZOTERO_PORT}`;
 const HEADERS = { "Zotero-Allowed-Request": "true" };
 
@@ -32,7 +32,7 @@ async function zoteroGet(path: string): Promise<any> {
 }
 
 async function currentReading(): Promise<any> {
-  return zoteroGet("/obzo/current");
+  return zoteroGet("/zob/current");
 }
 
 async function resolveKey(attachmentKey?: string): Promise<string> {
@@ -47,13 +47,13 @@ async function resolveKey(attachmentKey?: string): Promise<string> {
 
 async function readCache(): Promise<Record<string, any>> {
   if (!VAULT) {
-    throw new Error("OBZO_VAULT is not set (needed to read extracted content).");
+    throw new Error("ZOB_VAULT is not set (needed to read extracted content).");
   }
   const p = join(
     VAULT,
     ".obsidian",
     "plugins",
-    "obzo",
+    "zob",
     "equation-cache.json"
   );
   try {
@@ -86,7 +86,7 @@ function errText(e: unknown) {
   };
 }
 
-const server = new McpServer({ name: "obzo", version: "0.1.0" });
+const server = new McpServer({ name: "zob", version: "0.1.0" });
 
 server.registerTool(
   "current_paper",
@@ -309,7 +309,7 @@ server.registerTool(
   },
   async ({ markdown, note_path, mode }) => {
     try {
-      if (!VAULT) throw new Error("OBZO_VAULT is not set (needed to write notes).");
+      if (!VAULT) throw new Error("ZOB_VAULT is not set (needed to write notes).");
       const rel = (note_path ?? INBOX).replace(/^\/+/, "");
       const abs = resolve(VAULT, rel);
       if (!abs.startsWith(resolve(VAULT))) {
@@ -350,7 +350,7 @@ server.registerPrompt(
         content: {
           type: "text" as const,
           text: [
-            `Using the obzo tools:`,
+            `Using the zob tools:`,
             `1. Call current_paper to get the paper and its attachmentKey.`,
             `2. Call list_annotations with selectedOnly=true; if none, use the most recent highlight from list_annotations.`,
             `3. Rewrite the highlighted text as a clean, self-contained ${
@@ -378,7 +378,7 @@ server.registerPrompt(
         content: {
           type: "text" as const,
           text: [
-            `Build a literature note for the current paper using the obzo tools:`,
+            `Build a literature note for the current paper using the zob tools:`,
             `1. current_paper for title/authors/abstract/attachmentKey.`,
             `2. get_content (kind="statement" then "equation") for the key results; get_content(kind="figure") for figures.`,
             `3. list_annotations for my highlights and comments.`,
@@ -395,11 +395,11 @@ async function main() {
   await server.connect(transport);
   // stdout is the MCP channel — log to stderr only.
   console.error(
-    `[obzo-mcp] ready (zotero :${ZOTERO_PORT}, vault: ${VAULT || "unset"})`
+    `[zob-mcp] ready (zotero :${ZOTERO_PORT}, vault: ${VAULT || "unset"})`
   );
 }
 
 main().catch((e) => {
-  console.error("[obzo-mcp] fatal:", e);
+  console.error("[zob-mcp] fatal:", e);
   process.exit(1);
 });

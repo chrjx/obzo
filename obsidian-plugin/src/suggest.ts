@@ -70,15 +70,15 @@ export class ZobSuggest extends EditorSuggest<Suggestion> {
   }
 
   renderSuggestion(s: Suggestion, el: HTMLElement): void {
-    el.addClass("obzo-suggestion");
-    el.createDiv({ cls: "obzo-suggestion-kind", text: s.kind });
+    el.addClass("zob-suggestion");
+    el.createDiv({ cls: "zob-suggestion-kind", text: s.kind });
     if (s.kind === "equation") {
-      el.createEl("code", { cls: "obzo-suggestion-title", text: s.label });
+      el.createEl("code", { cls: "zob-suggestion-title", text: s.label });
     } else {
-      el.createDiv({ cls: "obzo-suggestion-title", text: s.label });
+      el.createDiv({ cls: "zob-suggestion-title", text: s.label });
     }
     if (s.detail) {
-      el.createDiv({ cls: "obzo-suggestion-meta", text: s.detail });
+      el.createDiv({ cls: "zob-suggestion-meta", text: s.detail });
     }
   }
 

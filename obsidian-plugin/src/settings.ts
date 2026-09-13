@@ -135,7 +135,7 @@ export class ZobSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "Zob" });
 
     const status = containerEl.createEl("p", {
-      cls: "obzo-settings-status",
+      cls: "zob-settings-status",
       text: "Checking capabilities…",
     });
     void (async () => {

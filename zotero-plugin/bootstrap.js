@@ -1,14 +1,14 @@
-/* Obzo Bridge — Zotero 7 companion plugin
+/* Zob Bridge — Zotero 7 companion plugin
  *
  * Registers two endpoints on Zotero's built-in HTTP server (port 23119):
  *
- *   GET /obzo/ping     -> { ok, plugin, version, push }
- *   GET /obzo/current  -> the PDF open in the active reader tab, plus the
+ *   GET /zob/ping     -> { ok, plugin, version, push }
+ *   GET /zob/current  -> the PDF open in the active reader tab, plus the
  *                         parent item's metadata (title, creators, DOI,
  *                         abstract, Better BibTeX citekey) and the file path.
- *   GET /obzo/wait     -> long-poll: blocks until the active reader tab
+ *   GET /zob/wait     -> long-poll: blocks until the active reader tab
  *                         changes (or a ~25s heartbeat), then returns the same
- *                         payload as /obzo/current. Lets the client be pushed
+ *                         payload as /zob/current. Lets the client be pushed
  *                         updates instead of polling on a timer.
  *
  * Zotero's server treats requests with no Origin header (curl, Obsidian's
@@ -19,7 +19,7 @@ var PLUGIN_VERSION = "0.3.0";
 
 function log(msg) {
   try {
-    Zotero.debug("[Obzo] " + msg);
+    Zotero.debug("[Zob] " + msg);
   } catch (e) {
     /* Zotero not ready */
   }
@@ -322,7 +322,7 @@ function registerNotifier() {
     notifierID = Zotero.Notifier.registerObserver(
       observer,
       ["tab"],
-      "obzo-bridge"
+      "zob-bridge"
     );
     log("tab notifier registered");
   } catch (e) {
@@ -374,18 +374,18 @@ function makeEndpoint(handler) {
 }
 
 function registerEndpoints() {
-  Zotero.Server.Endpoints["/obzo/ping"] = makeEndpoint(function () {
-    return { ok: true, plugin: "obzo-bridge", version: PLUGIN_VERSION, push: true };
+  Zotero.Server.Endpoints["/zob/ping"] = makeEndpoint(function () {
+    return { ok: true, plugin: "zob-bridge", version: PLUGIN_VERSION, push: true };
   });
-  Zotero.Server.Endpoints["/obzo/current"] = makeEndpoint(currentWithSeq);
-  Zotero.Server.Endpoints["/obzo/wait"] = makeEndpoint(function () {
+  Zotero.Server.Endpoints["/zob/current"] = makeEndpoint(currentWithSeq);
+  Zotero.Server.Endpoints["/zob/wait"] = makeEndpoint(function () {
     return waitForChange().then(currentWithSeq);
   });
-  log("endpoints registered: /obzo/ping, /obzo/current, /obzo/wait");
+  log("endpoints registered: /zob/ping, /zob/current, /zob/wait");
 }
 
 function unregisterEndpoints() {
-  var paths = ["/obzo/ping", "/obzo/current", "/obzo/wait"];
+  var paths = ["/zob/ping", "/zob/current", "/zob/wait"];
   for (var i = 0; i < paths.length; i++) {
     try {
       delete Zotero.Server.Endpoints[paths[i]];
